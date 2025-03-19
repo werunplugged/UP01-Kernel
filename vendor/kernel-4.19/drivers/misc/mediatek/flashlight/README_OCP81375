@@ -1,0 +1,31 @@
+This is a introduction for flashlight chip OCP81375
+
+[Scope]
+- Two channels for two LEDs
+
+[Hardware Interface]
+- I2C
+	* For general control
+	* Slave address 0x63
+
+
+[Limit]
+- Channel couple:
+	* Torch/Strobe
+
+- Channel decouple:
+	* Enable/Disable
+	* Brightness level
+
+- Torch Mode
+	* Min currnet: 3.90 mA
+	* Max current: 499.2 mA
+    * Current step: 3.90 mA
+
+- Strobe Mode
+	* Min currnet: 15.63 mA
+	* Max current: 2000.64 mA
+    * Current step: 15.63 mA
+	* Min protected timeout: 40 ms
+	* Max protected timeout: 1600 ms
+
