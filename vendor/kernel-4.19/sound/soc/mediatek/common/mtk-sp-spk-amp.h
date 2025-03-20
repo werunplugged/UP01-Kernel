@@ -14,6 +14,8 @@ struct mtk_spk_i2c_ctrl {
 	const char *stream_name;
 	const char *codec_dai_name;
 	const char *codec_name;
+	struct snd_soc_dai_link_component *codecs;
+        unsigned int num_codecs;
 };
 
 #define MTK_SPK_NOT_SMARTPA_STR "MTK_SPK_NOT_SMARTPA"
@@ -21,6 +23,7 @@ struct mtk_spk_i2c_ctrl {
 #define MTK_SPK_MEDIATEK_MT6660_STR "MTK_SPK_MEDIATEK_MT6660"
 #define MTK_SPK_MEDIATEK_RT5512_STR "MTK_SPK_MEDIATEK_RT5512"
 #define MTK_SPK_NXP_TFA98XX_STR "MTK_SPK_NXP_TFAXXXX"
+#define MTK_SPK_AW_AW882XX_STR "MTK_SPK_AW_AW882XX"
 #define MTK_SPK_AWINIC_AW883XX_STR "MTK_SPK_AWINIC_AW883XX"
 
 #define MTK_SPK_I2S_0_STR "MTK_SPK_I2S_0"
@@ -40,6 +43,7 @@ enum mtk_spk_type {
 	MTK_SPK_MEDIATEK_MT6660,
 	MTK_SPK_NXP_TFA98XX,
 	MTK_SPK_MEDIATEK_RT5512,
+	MTK_SPK_AW_AW882XX,
 	MTK_SPK_AWINIC_AW883XX,
 	MTK_SPK_TYPE_NUM
 };

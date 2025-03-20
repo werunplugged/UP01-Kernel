@@ -52,3 +52,7 @@ config IMGSENSOR_MAIN3
 	  This config is mainly mapping to userspace.
 	  Consider the numbers of sensors and usage on the phone.
 	  Compare the custom usage defined in user-custom folder.
+config LDO_WL2864C
+	bool "LDO WL2864C support"
+	help
+	  Specify main3 sensor.

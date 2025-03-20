@@ -13,6 +13,7 @@
 #include <linux/regulator/machine.h>
 
 #include "../inc/mt6360_ldo.h"
+#include <linux/cust_include/cust_project_all_config.h>
 
 static bool dbg_log_en; /* module param to enable/disable debug log */
 module_param(dbg_log_en, bool, 0644);
@@ -310,8 +311,20 @@ static int mt6360_ldo_enable(struct regulator_dev *rdev)
 
 	/* Enable SDCARD_DET before LDO5 enables. */
 	if (id == MT6360_LDO_LDO5 && pdata->sdcard_det_en) {
+#ifdef __CUST_MSDC_CD_HIGH__ 
+	#if    __CUST_MSDC_CD_HIGH__
+        //clear bit7, means set bit7(SDCARD_HLACT) as low. this is default status, it means before plug-in is low level, when plug-in is high.
+		ret = mt6360_ldo_reg_update_bits(mli, MT6360_LDO_LDO5_CTRL0,
+						 0x80, pdata->sdcard_hlact ? 0x7f : 0);
+	#else
 		ret = mt6360_ldo_reg_update_bits(mli, MT6360_LDO_LDO5_CTRL0,
 						 0x80, pdata->sdcard_hlact ? 0xff : 0);
+	#endif
+#else
+    //mtk default design: set bit7(SDCARD_HLACT) as high. this is default status, it means before plug-in is high level, when plug-in is low.
+		ret = mt6360_ldo_reg_update_bits(mli, MT6360_LDO_LDO5_CTRL0,
+						 0x80, pdata->sdcard_hlact ? 0xff : 0);
+#endif
 		if (ret < 0) {
 			dev_info(&rdev->dev,
 				"%s: sdcard_hlact fail (%d)\n", __func__, ret);

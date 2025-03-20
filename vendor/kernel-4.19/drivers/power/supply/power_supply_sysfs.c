@@ -520,6 +520,19 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(battery_type),
 	POWER_SUPPLY_ATTR(cycle_counts),
 	POWER_SUPPLY_ATTR(serial_number),
+#ifdef CONFIG_WIRELESS_POWER_MT5728
+	POWER_SUPPLY_ATTR(charging_enabled),
+	POWER_SUPPLY_ATTR(vout_now),
+	POWER_SUPPLY_ATTR(vrect),
+	POWER_SUPPLY_ATTR(irect),
+	POWER_SUPPLY_ATTR(temp_ntc),
+	POWER_SUPPLY_ATTR(temp_ic),
+	POWER_SUPPLY_ATTR(temp_warm_ntc),
+	POWER_SUPPLY_ATTR(temp_hot_ntc),
+	POWER_SUPPLY_ATTR(temp_warm_battery),
+	POWER_SUPPLY_ATTR(temp_hot_battery),
+	POWER_SUPPLY_ATTR(call_status),
+#endif
 };
 
 static struct attribute *

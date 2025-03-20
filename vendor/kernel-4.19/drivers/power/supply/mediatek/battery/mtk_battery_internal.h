@@ -660,6 +660,7 @@ struct battery_data {
 	/* Add for Battery Service */
 	int BAT_batt_vol;
 	int BAT_batt_temp;
+	int BAT_BatteryAverageCurrent;
 };
 
 struct BAT_EC_Struct {

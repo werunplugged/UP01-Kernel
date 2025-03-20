@@ -10,8 +10,9 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
-#include <mt-plat/prop_chgalgo_class.h>
+#include <mt-plat/v1/prop_chgalgo_class.h>
 #include <tcpm.h>
+#include <linux/cust_include/cust_project_all_config.h>
 
 #define PCA_PPS_TA_VERSION	"2.0.0_G"
 #define PCA_PPS_CMD_RETRY_COUNT	2
@@ -496,7 +497,24 @@ static struct platform_driver pca_pps_platdrv = {
 	.probe = pca_pps_probe,
 	.remove = pca_pps_remove,
 };
-module_platform_driver(pca_pps_platdrv);
+
+
+
+static int __init pca_pps_charger_init(void)
+{
+	return platform_driver_register(&pca_pps_platdrv);
+}
+#if defined(__CUST_M156_BOARD__)
+device_initcall_sync(pca_pps_charger_init);
+#else
+late_initcall(pca_pps_charger_init);
+#endif
+
+static void __exit pca_pps_charger_exit(void)
+{
+	platform_driver_unregister(&pca_pps_platdrv);
+}
+module_exit(pca_pps_charger_exit);
 
 MODULE_DESCRIPTION("Programmable Power Supply TA For PCA");
 MODULE_AUTHOR("ShuFan Lee<shufan_lee@richtek.com>");

@@ -1,6 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2015-2019 TrustKernel Incorporated
+ * All Rights Reserved.
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #include <linux/kernel.h>
@@ -26,10 +36,6 @@
 
 #include "tee_procfs.h"
 #include "tee_core_priv.h"
-
-#ifdef CONFIG_OF
-#include <linux/of_irq.h>
-#endif
 
 #define PROC_DBG(fmt, ...) do {} while (0)
 
@@ -288,11 +294,13 @@ int tee_log_open(struct inode *inode, struct file *file)
 	if (ulog == NULL)
 		return -ENOMEM;
 
+	if (klog.log_ctl == NULL)
+		return -EIO;
+
 	ulog->tmpbuf = ulog_flag_begin;
 	ulog->klog = &klog;
 
 	ret = nonseekable_open(inode, file);
-
 	if (unlikely(ret)) {
 		kfree(ulog);
 
@@ -525,18 +533,20 @@ static ssize_t copy_to_user_str(char __user *buf, ssize_t count, loff_t *pos,
 	return cnt - r;
 }
 
-static int tee_version_major, tee_version_minor;
-
 static ssize_t tee_version_read(struct file *file, char __user *buf,
 				size_t count, loff_t *pos)
 {
-	char tee_version[20];
+	struct tee *tee;
+	char tee_version[32];
 
 	if (buf == NULL || pos == NULL)
 		return -EINVAL;
 
+	tee = (struct tee *) file->private_data;
+
 	snprintf(tee_version, sizeof(tee_version),
-		 "0.%d.%d-gp\n", tee_version_major, tee_version_minor);
+		"%u.%u.%u-gp\n",
+		tee->version.maj, tee->version.mid, tee->version.min);
 
 	return copy_to_user_str(buf, count, pos, tee_version);
 }
@@ -547,7 +557,6 @@ static const struct file_operations tee_version_ops = {
 	.open = NULL,
 	.release = NULL
 };
-
 
 static ssize_t drv_version_read(struct file *file, char __user *buf,
 				size_t count, loff_t *pos)
@@ -774,35 +783,19 @@ static int logd(void *args)
 	return 0;
 }
 
-static int register_klog_irq(struct klog *klog)
+static int register_klog_irq(struct tee *tee, struct klog *klog)
 {
 	int r;
-	int irq_num;
 
-#ifdef CONFIG_OF
-	struct device_node *node;
-
-	node = of_find_compatible_node(NULL, NULL,
-						"trustkernel,tkcore");
-	if (node) {
-		irq_num = irq_of_parse_and_map(node, 0);
-	} else {
-		pr_err("tkcoredrv: node not found\n");
-		irq_num = -1;
-	}
-#else
-	irq_num = TEE_LOG_IRQ;
-#endif
-
-	if (irq_num < 0) {
-		pr_warn("tkcoredrv: unknown tee_log_irq id\n");
-		return -1;
+	if (tee->log.irq == 0) {
+		pr_warn("tkcoredrv: unknown tee log irq\n");
+		return 0;
 	}
 
-	pr_info("tkcoredrv: tee_log_irq id = %d\n",
-			irq_num);
+	pr_info("tkcoredrv: tee log irq = %d\n",
+			tee->log.irq);
 
-	r = request_irq(irq_num,
+	r = request_irq(tee->log.irq,
 		(irq_handler_t) tkcore_log_irq_handler,
 		IRQF_TRIGGER_RISING,
 		"tee_log_irq", NULL);
@@ -813,101 +806,33 @@ static int register_klog_irq(struct klog *klog)
 		return -1;
 	}
 
-	klog->notify_irq = irq_num;
-
-	return 0;
-}
-
-static int init_tos_version(struct tee *tee)
-{
-	struct smc_param param;
-
-	memset(&param, 0, sizeof(param));
-
-	/* get os revision */
-	param.a0 = TEESMC32_CALL_GET_OS_REVISION;
-	tee->ops->raw_call_tee(&param);
-
-	tee_version_major = param.a0;
-	tee_version_minor = param.a1;
-
-	pr_info("tkcoreos-rev: 0.%d.%d-gp\n",
-		tee_version_major, tee_version_minor);
-
-	return 0;
-}
-
-static int init_klog_shm_args(struct tee *tee,
-							unsigned long *shm_pa,
-							unsigned int *shm_len)
-{
-	struct smc_param param;
-
-	unsigned long pa;
-	unsigned int len;
-
-	if (shm_pa == NULL || shm_len == NULL)
-		return -1;
-
-	memset(&param, 0, sizeof(param));
-
-	param.a0 = TEESMC32_ST_FASTCALL_GET_LOGM_CONFIG;
-	tee->ops->raw_call_tee(&param);
-
-	if (param.a0 != TEESMC_RETURN_OK) {
-		pr_err("Log service not available: 0x%x",
-			(uint) param.a0);
-		return -1;
-	}
-
-	pa = param.a1;
-	len = param.a2;
-
-	if (len <= TEE_LOG_CTL_BUF_SIZE) {
-		pr_err("tkcoredrv: invalid shm_len: %u\n",
-				len);
-		return -1;
-	}
-
-	if ((pa & (PAGE_SIZE - 1)) ||
-		(len & (PAGE_SIZE - 1))) {
-		pr_err("tkcoredrv: invalid klog args\n");
-		pr_err("tkcoredrv: pa=0x%lx len=0x%x\n",
-				pa, len);
-		return -1;
-	}
-
-	*shm_pa = pa;
-	*shm_len = len;
+	klog->notify_irq = tee->log.irq;
 
 	return 0;
 }
 
 static int init_klog_shm(struct klog *klog,
-						unsigned long shm_pa,
-						unsigned int shm_len)
+						void *shm_va,
+						size_t shm_len)
 {
 	char *rb;
 	uint32_t rb_len;
 	union tee_log_ctrl *log_ctl;
 
-	log_ctl = tee_map_cached_shm(shm_pa,
-								shm_len);
-
-	if (log_ctl == NULL) {
-		pr_err("tkcoredrv: failed to map shm\n");
-		pr_err("tkcoredrv: pa=0x%lx len=%u\n",
-				shm_pa, shm_len);
+	if (shm_len <= TEE_LOG_CTL_BUF_SIZE) {
+		pr_err("tkcoredrv: init_klog_shm: shm_len %zu too small\n",
+				shm_len);
 		return -1;
 	}
+
+	log_ctl = (union tee_log_ctrl *) shm_va;
 
 	rb = (char *) log_ctl + TEE_LOG_CTL_BUF_SIZE;
 	rb_len = log_ctl->info.tee_buf_size;
 
 	if (rb_len != shm_len - TEE_LOG_CTL_BUF_SIZE) {
 		pr_err("tkcoredrv:Unexpected shm length: %u\n",
-				shm_len);
-		tee_unmap_cached_shm(log_ctl);
+				rb_len);
 		return -1;
 	}
 
@@ -923,22 +848,22 @@ static int init_klog_shm(struct klog *klog,
 
 static int init_klog(struct klog *klog, struct tee *tee)
 {
-	unsigned long shm_pa;
-	unsigned int shm_len;
+	/* sanity of tee is verified in tee_init_procfs */
 
 	BUILD_BUG_ON(sizeof(union tee_log_ctrl)
 			!= TEE_LOG_CTL_BUF_SIZE);
 
-	klog->notify_irq = -1;
+	memset(klog, 0, sizeof(*klog));
 
-	if (init_klog_shm_args(tee, &shm_pa,
-						&shm_len) < 0) {
-		return -1;
+	if (tee->log.buffer == NULL ||
+			tee->log.length == 0) {
+		/* tee log setup fails */
+		return 0;
 	}
 
 	if (init_klog_shm(klog,
-					shm_pa,
-					shm_len) < 0) {
+					tee->log.buffer,
+					tee->log.length) < 0) {
 		return -1;
 	}
 
@@ -946,9 +871,8 @@ static int init_klog(struct klog *klog, struct tee *tee)
 
 	init_waitqueue_head(&klog->wq);
 
-	if (register_klog_irq(klog) < 0)
+	if (register_klog_irq(tee, klog) < 0)
 		goto err_unmap_shm;
-
 
 	klog->ts = kthread_run(logd,
 				(void *) klog, "tee-log");
@@ -964,14 +888,13 @@ err_free_irq:
 		free_irq(klog->notify_irq, NULL);
 
 err_unmap_shm:
-	tee_unmap_cached_shm(klog->log_ctl);
 
 	memset(klog, 0, sizeof(*klog));
 	/*
 	 * set notify_irq to
 	 * un-initialized state
 	 */
-	klog->notify_irq = -1;
+	klog->notify_irq = 0;
 
 	return -1;
 }
@@ -983,7 +906,7 @@ static void free_klog(struct klog *klog)
 {
 	if (klog->notify_irq > 0) {
 		free_irq(klog->notify_irq, NULL);
-		klog->notify_irq = -1;
+		klog->notify_irq = 0;
 	}
 
 	kthread_stop(klog->ts);
@@ -1007,9 +930,10 @@ static void free_klog(struct klog *klog)
 
 int tee_init_procfs(struct tee *tee)
 {
-	mutex_init(&trace_mutex);
+	if (WARN_ON(!tee || !tee->priv))
+		return -1;
 
-	init_tos_version(tee);
+	mutex_init(&trace_mutex);
 
 	if (create_entry(tee) < 0)
 		return -1;

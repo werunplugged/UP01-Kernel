@@ -10,7 +10,7 @@
 #include <linux/slab.h>
 #include <linux/list.h>
 
-#include <mt-plat/prop_chgalgo_class.h>
+#include <mt-plat/v1/prop_chgalgo_class.h>
 
 #define PROP_CHGALGO_CLASS_VERSION	"2.0.0_G"
 
@@ -424,22 +424,36 @@ int prop_chgalgo_init_algo(struct prop_chgalgo_device *pca)
 }
 EXPORT_SYMBOL(prop_chgalgo_init_algo);
 
+bool prop_chgalgo_is_algo_init(struct prop_chgalgo_device *pca)
+{
+	if (pca_check_devtype(pca, PCA_DEVTYPE_ALGO) < 0)
+		return -EINVAL;
+	if (!pca->desc->algo_ops->is_algo_init)
+		return -ENOTSUPP;
+	return pca->desc->algo_ops->is_algo_init(pca);
+}
+EXPORT_SYMBOL(prop_chgalgo_is_algo_init);
+
 bool prop_chgalgo_is_algo_ready(struct prop_chgalgo_device *pca)
 {
-	if (!pca_check_devtype_bool(pca, PCA_DEVTYPE_ALGO))
+	if (!pca_check_devtype_bool(pca, PCA_DEVTYPE_ALGO)){
 		return false;
-	if (!pca->desc->algo_ops->is_algo_ready)
+    }
+	if (!pca->desc->algo_ops->is_algo_ready){
 		return false;
+       }
 	return pca->desc->algo_ops->is_algo_ready(pca);
 }
 EXPORT_SYMBOL(prop_chgalgo_is_algo_ready);
 
 int prop_chgalgo_start_algo(struct prop_chgalgo_device *pca)
 {
-	if (pca_check_devtype(pca, PCA_DEVTYPE_ALGO) < 0)
+	if (pca_check_devtype(pca, PCA_DEVTYPE_ALGO) < 0){
 		return -EINVAL;
-	if (!pca->desc->algo_ops->start_algo)
+       }
+	if (!pca->desc->algo_ops->start_algo){
 		return -ENOTSUPP;
+       }
 	return pca->desc->algo_ops->start_algo(pca);
 }
 EXPORT_SYMBOL(prop_chgalgo_start_algo);

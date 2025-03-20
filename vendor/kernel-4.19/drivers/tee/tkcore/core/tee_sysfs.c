@@ -1,6 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2015-2019 TrustKernel Incorporated
+ * All Rights Reserved.
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #include <linux/kernel.h>
@@ -89,32 +99,6 @@ static ssize_t conf_show(struct device *device,
 	return snprintf(buf, PAGE_SIZE, "0x%08x\n", tee->conf);
 }
 
-static ssize_t test_show(struct device *device,
-			 struct device_attribute *attr, char *buf)
-{
-	struct tee *tee = dev_get_drvdata(device);
-
-	return snprintf(buf, PAGE_SIZE, "%08X\n", tee->test);
-}
-
-static ssize_t test_store(struct device *device,
-			  struct device_attribute *attr, const char *buf,
-			  size_t count)
-{
-	struct tee *tee = dev_get_drvdata(device);
-	unsigned long val;
-	int status;
-
-	status = kstrtoul(buf, 0, &val);
-	if (status)
-		return status;
-
-	if ((tee->conf & TEE_CONF_TEST_MODE) == TEE_CONF_TEST_MODE)
-		tee->test = val;
-
-	return count;
-}
-
 /*
  * A state-to-string lookup table, for exposing a human readable state
  * via sysfs. Always keep in sync with enum tee_state
@@ -143,7 +127,6 @@ static struct device_attribute device_attrs[] = {
 	__ATTR_RO(dump),
 	__ATTR_RO(stat),
 	__ATTR_RO(info),
-	__ATTR(test, (0660), test_show, test_store),
 	__ATTR(state, 0444, tee_show_state, NULL),
 	__ATTR(name, 0444, name_show, NULL),
 	__ATTR(refcount, 0444, refcount_show, NULL),

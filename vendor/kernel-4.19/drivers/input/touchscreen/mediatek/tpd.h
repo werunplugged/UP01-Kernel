@@ -1,7 +1,15 @@
-/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (c) 2019 MediaTek Inc.
-*/
+ * Copyright (C) 2016 MediaTek Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
+ */
 
 #ifndef __TPD_H
 #define __TPD_H
@@ -23,6 +31,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/pinctrl/consumer.h>
 
+#include <linux/cust_include/cust_project_all_config.h>
 /*debug macros */
 #define TPD_DEBUG
 #define TPD_DEBUG_CODE
@@ -135,6 +144,7 @@ struct tpd_driver_t {
 	void (*resume)(struct device *h);
 	int tpd_have_button;
 	struct tpd_attrs attrs;
+	char descript[30];
 };
 
 
@@ -160,8 +170,14 @@ extern void tpd_get_dts_info(void);
 #else
 #define GTP_RST_PORT    0
 #define GTP_INT_PORT    1
+#ifdef __CUST_GPIO_CTP_EN_PIN__
+#if __CUST_GPIO_CTP_EN_PIN__
+#define GTP_POWER_PORT    2
+#endif
+#endif
 #endif
 extern void tpd_gpio_as_int(int pin);
+extern void tpd_gpio_as_int_bias_dis(int pin);
 extern void tpd_gpio_output(int pin, int level);
 extern const struct of_device_id touch_of_match[];
 #ifdef TPD_DEBUG_CODE

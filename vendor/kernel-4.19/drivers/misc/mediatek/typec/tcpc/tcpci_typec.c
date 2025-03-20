@@ -42,6 +42,9 @@ enum TYPEC_ROLE_SWAP_STATE {
 	TYPEC_ROLE_SWAP_TO_SRC,
 };
 
+#ifdef CONFIG_WIRELESS_POWER_MT5728
+bool otg_plugin = false;
+#endif
 #if TYPEC_INFO2_ENABLE
 static const char *const typec_wait_ps_name[] = {
 	"Disable",
@@ -1528,6 +1531,17 @@ static inline bool typec_handle_cc_changed_entry(struct tcpc_device *tcpc)
 {
 	TYPEC_INFO("[CC_Change] %d/%d\n", typec_get_cc1(), typec_get_cc2());
 
+#ifdef CONFIG_WIRELESS_POWER_MT5728
+	if(typec_get_cc1() == 2 || typec_get_cc2() == 2)
+		{
+			if(typec_get_cc1() == 2 || typec_get_cc2() == 2)
+			otg_plugin = 1;
+			else
+			otg_plugin = 0;
+		}
+		else
+			otg_plugin = 0;
+#endif
 	tcpc->typec_attach_new = tcpc->typec_attach_old;
 
 	if (tcpc_typec_is_act_as_sink_role(tcpc))

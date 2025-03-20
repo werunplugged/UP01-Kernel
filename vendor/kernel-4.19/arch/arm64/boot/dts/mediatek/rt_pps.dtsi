@@ -1,0 +1,49 @@
+/ {
+	rt_pps {
+		polling_mode;	/* enable polling thread */
+		polling_interval = <500>;
+		cv_limit = <5900>;
+		bat_upper_bound = <4350>;
+		pps_dc_start_battery_soc = <1>;
+		cc_ss_init = <1500>;
+		cc_init = <5900>;
+		cc_init_bad_cable0 = <5000>;
+		cc_init_bad_cable1 = <4000>;
+		cc_init_bad_cable2 = <3000>;
+		cc_init_r = <180>;
+		cc_init_bad_cable0_r = <200>;
+		cc_init_bad_cable1_r = <220>;
+		cc_init_bad_cable2_r = <250>;
+		cc_normal = <4000>;
+		cc_max = <6500>;
+		cc_end = <3000>;
+		cc_step = <200>;
+		cc_ss_step = <500>;
+		cc_ss_step1 = <200>;
+		cc_ss_step2 = <100>;
+		cv_ss_step1 = <4000>;
+		cv_ss_step2 = <4200>;
+		cc_ss_blanking = <100>;
+		cc_blanking = <1000>;
+		charger_temp_max = <75>;
+		ta_warn_level1_temp = <75>;
+		ta_warn_level2_temp = <76>;
+		ta_warn_level3_temp = <78>;
+		ta_temp_max = <80>;
+		vbus_ov_gap = <100>;
+		fod_current = <200>;
+		r_vbat_min = <50>;
+		r_sw_min = <20>;
+		bat_temp_min = <0>;
+		bat_warn_level1_temp = <56>;
+		bat_warn_level2_temp = <58>;
+		bat_warn_level3_temp = <59>;
+		bat_temp_max = <59>;
+		curr_reco_temp_region = <3>;
+		ta_pps_cap_vmin = <3400>;
+		ta_pps_cap_vmax = <5900>;
+		ta_pps_cap_imin = <3000>;
+		chg_time_max = <9000>;
+		/*need_bif;*/	/* is bif necessary */
+	};
+};

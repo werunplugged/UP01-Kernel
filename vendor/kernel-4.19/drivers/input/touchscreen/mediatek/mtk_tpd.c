@@ -1,7 +1,15 @@
-/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (c) 2019 MediaTek Inc.
-*/
+ * Copyright (C) 2016 MediaTek Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
+ */
 #include "tpd.h"
 #include <linux/slab.h>
 #include <linux/device.h>
@@ -18,6 +26,15 @@
 #include <linux/compat.h>
 #endif
 
+#ifdef CONFIG_CUST_DEVICE_INFO_SUPPORT
+extern int up_set_touch_device_used(char * module_name, int pdata);
+typedef enum 
+{ 
+    DEVICE_SUPPORTED = 0,        
+    DEVICE_USED = 1,
+}compatible_type;
+extern int up_touchpanel_device_add(struct tpd_driver_t* mTouch, compatible_type isUsed);
+#endif
 #if defined(CONFIG_MTK_S3320) || defined(CONFIG_MTK_S3320_50) \
 	|| defined(CONFIG_MTK_S3320_47) || defined(CONFIG_MTK_MIT200) \
 	|| defined(CONFIG_TOUCHSCREEN_SYNAPTICS_S3528) \
@@ -35,17 +52,48 @@
 #define COMPAT_TPD_GET_FILTER_PARA _IOWR(TOUCH_IOC_MAGIC, \
 						2, struct tpd_filter_t)
 #endif
+
+#if defined(__CUST_TP_GESTURE_SUPPORT__)
+#if __CUST_TP_GESTURE_SUPPORT__ 
+	#include <linux/freezer.h> 			//add for wait queue
+
+	#define UP_GESTURE_ENABLE			_IOW(TOUCH_IOC_MAGIC,	3, int)		//Enable gesture switch
+	#define UP_GESTURE_GENERATE		_IOR(TOUCH_IOC_MAGIC,	4, char*)	//Report specific gesture
+
+	char tpgesture_status = 0;
+	char tpgesture_value[10]={};
+
+	static wait_queue_head_t g_Waitq;
+	static DECLARE_WAIT_QUEUE_HEAD(g_Waitq);
+	static int flag_irq;
+
+	void tpgesture_hander(void)
+	{
+		flag_irq = 1;
+		wake_up(&g_Waitq);
+	}
+#endif
+#endif
+
 struct tpd_filter_t tpd_filter;
 struct tpd_dts_info tpd_dts_data;
 struct pinctrl *pinctrl1;
 struct pinctrl_state *pins_default;
 struct pinctrl_state *eint_as_int, *eint_output0,
 		*eint_output1, *rst_output0, *rst_output1;
+#ifdef __CUST_GPIO_CTP_EN_PIN__
+#if __CUST_GPIO_CTP_EN_PIN__
+struct pinctrl_state *eint_as_int, *eint_output0, *eint_output1, *rst_output0, *rst_output1, *eint_as_int_bias_dis, *power_output0, *power_output1;
+#else
+struct pinctrl_state *eint_as_int, *eint_output0, *eint_output1, *rst_output0, *rst_output1, *eint_as_int_bias_dis;
+#endif
+#else
+struct pinctrl_state *eint_as_int, *eint_output0, *eint_output1, *rst_output0, *rst_output1, *eint_as_int_bias_dis;
+#endif
 const struct of_device_id touch_of_match[] = {
 	{ .compatible = "mediatek,touch", },
 	{ .compatible = "mediatek,mt8167-touch", },
 	{ .compatible = "mediatek,touch-himax", },
-	{ .compatible = "goodix,touch", },
 	{},
 };
 
@@ -83,8 +131,7 @@ void tpd_get_dts_info(void)
 			if (of_property_read_u32_array(node1,
 				"tpd-key-dim-local",
 				key_dim_local, ARRAY_SIZE(key_dim_local))) {
-				memcpy(tpd_dts_data.tpd_key_dim_local,
-					key_dim_local, sizeof(key_dim_local));
+
 				for (i = 0; i < 4; i++) {
 					pr_debug("[tpd]key[%d].key_x = %d\n", i,
 						tpd_dts_data
@@ -104,6 +151,8 @@ void tpd_get_dts_info(void)
 							.key_height);
 				}
 			}
+					memcpy(tpd_dts_data.tpd_key_dim_local,
+					key_dim_local, sizeof(key_dim_local));
 		}
 		of_property_read_u32(node1, "tpd-filter-enable",
 			&tpd_dts_data.touch_filter.enable);
@@ -149,10 +198,33 @@ void tpd_gpio_as_int(int pin)
 	mutex_unlock(&tpd_set_gpio_mutex);
 }
 
+void tpd_gpio_as_int_bias_dis(int pin)
+{
+      if(IS_ERR(eint_as_int_bias_dis))
+      {
+          pr_err( "ERROR!!!! tpd_gpio_as_int_bias_dis set failed!!!!\n");
+          return;
+      }
+	mutex_lock(&tpd_set_gpio_mutex);
+	TPD_DEBUG("[tpd]tpd_gpio_as_int_bias_dis\n");
+	if (pin == 1)
+		pinctrl_select_state(pinctrl1, eint_as_int_bias_dis);
+	mutex_unlock(&tpd_set_gpio_mutex);
+}
 void tpd_gpio_output(int pin, int level)
 {
 	mutex_lock(&tpd_set_gpio_mutex);
 	TPD_DEBUG("%s pin = %d, level = %d\n", __func__, pin, level);
+#ifdef __CUST_GPIO_CTP_EN_PIN__
+#if __CUST_GPIO_CTP_EN_PIN__
+	if (pin == 2) {
+		if (level)
+			pinctrl_select_state(pinctrl1, power_output1);
+		else
+			pinctrl_select_state(pinctrl1, power_output0);
+	}
+#endif
+#endif
 	if (pin == 1) {
 		if (level)
 			pinctrl_select_state(pinctrl1, eint_output1);
@@ -212,6 +284,22 @@ int tpd_get_gpio_info(struct platform_device *pdev)
 		return ret;
 	}
 	if (tpd_dts_data.tpd_use_ext_gpio == false) {
+#ifdef __CUST_GPIO_CTP_EN_PIN__
+#if __CUST_GPIO_CTP_EN_PIN__
+		power_output0 = pinctrl_lookup_state(pinctrl1, "state_power_output0");
+		if (IS_ERR(power_output0)) {
+			ret = PTR_ERR(power_output0);
+			dev_err(&pdev->dev, "fwq Cannot find touch pinctrl state_power_output0!\n");
+			return ret;
+		}
+		power_output1 = pinctrl_lookup_state(pinctrl1, "state_power_output1");
+		if (IS_ERR(power_output1)) {
+			ret = PTR_ERR(power_output1);
+			dev_err(&pdev->dev, "fwq Cannot find touch pinctrl state_power_output1!\n");
+			return ret;
+		}
+#endif
+#endif
 		rst_output0 =
 			pinctrl_lookup_state(pinctrl1, "state_rst_output0");
 		if (IS_ERR(rst_output0)) {
@@ -224,6 +312,12 @@ int tpd_get_gpio_info(struct platform_device *pdev)
 		if (IS_ERR(rst_output1)) {
 			ret = PTR_ERR(rst_output1);
 			TPD_DMESG("Cannot find pinctrl state_rst_output1!\n");
+			return ret;
+		}
+		eint_as_int_bias_dis = pinctrl_lookup_state(pinctrl1, "state_eint_as_int_bias_dis");
+		if (IS_ERR(eint_as_int_bias_dis)) {
+			ret = PTR_ERR(eint_as_int_bias_dis);
+			dev_err(&pdev->dev, "fwq Cannot find touch pinctrl state_eint_as_int!\n");
 			return ret;
 		}
 	}
@@ -279,6 +373,14 @@ static long tpd_unlocked_ioctl(struct file *file,
 	void __user *data;
 
 	long err = 0;
+
+#if defined(__CUST_TP_GESTURE_SUPPORT__)
+#if __CUST_TP_GESTURE_SUPPORT__
+	int ioarg = 0;
+	char temp[10]={};
+#endif
+#endif
+
 
 	if (_IOC_DIR(cmd) & _IOC_READ)
 		err = !access_ok(VERIFY_WRITE,
@@ -340,6 +442,28 @@ static long tpd_unlocked_ioctl(struct file *file,
 				break;
 			}
 			break;
+
+#if defined(__CUST_TP_GESTURE_SUPPORT__)
+#if __CUST_TP_GESTURE_SUPPORT__
+	case UP_GESTURE_ENABLE:
+		err = copy_from_user(&ioarg, (unsigned int*)arg, sizeof(unsigned int));
+
+		tpgesture_status = ioarg;
+
+		break;
+
+    case UP_GESTURE_GENERATE:
+		flag_irq = 0;
+		wait_event_freezable(g_Waitq, 0 != flag_irq);
+		data = (void __user *) arg;
+
+		strcpy(temp,tpgesture_value);
+
+		err = copy_to_user(data, &temp, sizeof(temp));
+		break;
+#endif
+#endif
+
 	default:
 		pr_info("tpd: unknown IOCTL: 0x%08x\n", cmd);
 		err = -ENOIOCTLCMD;
@@ -414,6 +538,59 @@ static void touch_resume_workqueue_callback(struct work_struct *work)
 	g_tpd_drv->resume(NULL);
 	tpd_suspend_flag = 0;
 }
+
+#if defined(__CUST_TP_GESTURE_SUPPORT__)
+static int tpd_fb_notifier_callback(
+			struct notifier_block *self,
+			unsigned long event, void *data)
+{
+	struct fb_event *evdata = NULL;
+	int blank;
+	int err = 0;
+
+	TPD_DEBUG("%s\n", __func__);
+
+	evdata = data;
+	/* If we aren't interested in this event, skip it immediately ... */
+	if ((event != FB_EVENT_BLANK) && (event != FB_EARLY_EVENT_BLANK))
+		return 0;
+
+	blank = *(int *)evdata->data;
+	TPD_DMESG("fb_notify(blank=%d)\n", blank);
+        if (event == FB_EARLY_EVENT_BLANK) {
+                     switch (blank) {
+                     case FB_BLANK_POWERDOWN:
+                                TPD_DMESG("LCD OFF Notify\n");
+                                if (g_tpd_drv && !tpd_suspend_flag) {
+                                           err = cancel_work_sync(&touch_resume_work);
+                                           if (!err)
+                                                     TPD_DMESG("cancel touch_resume_workqueue err = %d\n", err);
+                                           g_tpd_drv->suspend(NULL);
+                                }
+                                tpd_suspend_flag = 1;
+                                break;
+                     default:
+                                break;
+                     }
+         } else if (event == FB_EVENT_BLANK) {
+           switch (blank) {
+                     case FB_BLANK_UNBLANK:
+                                TPD_DMESG("LCD ON Notify\n");
+                                if (g_tpd_drv && tpd_suspend_flag) {
+                                           err = queue_work(touch_resume_workqueue, &touch_resume_work);
+                                           if (!err) {
+                                                    	TPD_DMESG("cancel resume_workqueue failed\n");
+                                                     return err;
+                                          }
+                                }
+                                break;
+                     default:
+                                break;
+                     }
+        }
+	return 0;
+}
+#else
 static int tpd_fb_notifier_callback(
 			struct notifier_block *self,
 			unsigned long event, void *data)
@@ -458,6 +635,7 @@ static int tpd_fb_notifier_callback(
 	}
 	return 0;
 }
+#endif
 /* Add driver: if find TPD_TYPE_CAPACITIVE driver successfully, loading it */
 int tpd_driver_add(struct tpd_driver_t *tpd_drv)
 {
@@ -471,6 +649,11 @@ int tpd_driver_add(struct tpd_driver_t *tpd_drv)
 	if (tpd_drv == NULL)
 		return -1;
 	tpd_drv->tpd_have_button = tpd_dts_data.use_tpd_button;
+
+    #ifdef CONFIG_CUST_DEVICE_INFO_SUPPORT
+        up_touchpanel_device_add(tpd_drv,DEVICE_SUPPORTED);
+    #endif	
+
 	/* R-touch */
 	if (strcmp(tpd_drv->tpd_device_name, "generic") == 0) {
 		tpd_driver_list[0].tpd_device_name = tpd_drv->tpd_device_name;
@@ -602,13 +785,13 @@ static int tpd_probe(struct platform_device *pdev)
 #endif
 #endif
 	}
-
+#if 0
 	if (2560 == TPD_RES_X)
 		TPD_RES_X = 2048;
 	if (1600 == TPD_RES_Y)
 		TPD_RES_Y = 1536;
-	pr_debug("mtk_tpd: TPD_RES_X = %lu, TPD_RES_Y = %lu\n",
-		TPD_RES_X, TPD_RES_Y);
+#endif
+	pr_debug("mtk_tpd: TPD_RES_X = %lu, TPD_RES_Y = %lu\n", TPD_RES_X, TPD_RES_Y);
 
 	tpd_mode = TPD_MODE_NORMAL;
 	tpd_mode_axis = 0;
@@ -642,6 +825,11 @@ static int tpd_probe(struct platform_device *pdev)
 				TPD_DMESG("%s, tpd_driver_name=%s\n", __func__,
 					  tpd_driver_list[i].tpd_device_name);
 				g_tpd_drv = &tpd_driver_list[i];
+
+#ifdef CONFIG_CUST_DEVICE_INFO_SUPPORT
+	            up_set_touch_device_used(g_tpd_drv->tpd_device_name, 0);
+#endif
+
 				break;
 			}
 		}

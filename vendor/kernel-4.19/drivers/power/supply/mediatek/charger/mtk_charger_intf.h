@@ -22,6 +22,8 @@
 
 #include <mt-plat/v1/charger_class.h>
 
+#include <linux/cust_include/cust_project_all_config.h>
+
 struct charger_manager;
 struct charger_data;
 #include "mtk_pe_intf.h"
@@ -29,6 +31,9 @@ struct charger_data;
 #include "mtk_pe40_intf.h"
 #include "mtk_pe50_intf.h"
 #include "mtk_pdc_intf.h"
+#ifdef CONFIG_RT_HVDV2_SUPPORT
+#include "rt_hvdv2_intf.h"
+#endif
 #include "adapter_class.h"
 #include "mtk_smartcharging.h"
 
@@ -77,6 +82,9 @@ do {								\
 #define CHR_PE50_READY	(0x000E)
 #define CHR_PE50_RUNNING	(0x000F)
 #define CHR_PE50	(0x0010)
+#define CHR_HVDV2_READY		(0x0011)
+#define CHR_HVDV2_RUNNING	(0x0012)
+#define CHR_HVDV2		(0x0013)
 
 /* charging abnormal status */
 #define CHG_VBUS_OV_STATUS	(1 << 0)
@@ -265,6 +273,11 @@ struct charger_custom_data {
 	int pd_ichg_level_threshold;
 	int pd_stop_battery_soc;
 
+#ifdef CONFIG_WIRELESS_POWER_MT5728
+	int ech_wls_charger_current;
+	int ech_wls_charger_input_current;
+#endif
+
 	int vsys_watt;
 	int ibus_err;
 };
@@ -306,6 +319,10 @@ struct charger_manager {
 	struct charger_device *dvchg2_dev;
 	struct notifier_block dvchg2_nb;
 	struct charger_data dvchg2_data;
+
+	struct charger_device *hv_dvchg1_dev;
+	struct notifier_block hv_dvchg1_nb;
+	struct charger_data hv_dvchg1_data;
 
 	struct adapter_device *pd_adapter;
 
@@ -373,6 +390,12 @@ struct charger_manager {
 	bool enable_pe_5;
 	bool leave_pe5;
 	struct mtk_pe50 pe5;
+
+	/* hv dv2 */
+	bool enable_hvdv2;
+#ifdef CONFIG_RT_HVDV2_SUPPORT
+	struct rt_hvdv2 hvdv2;
+#endif
 
 	/* type-C*/
 	bool enable_type_c;

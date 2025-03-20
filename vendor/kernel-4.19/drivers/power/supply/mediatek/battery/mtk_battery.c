@@ -477,8 +477,8 @@ static int battery_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CAPACITY:
 		/* 1 = META_BOOT, 4 = FACTORY_BOOT 5=ADVMETA_BOOT */
 		/* 6= ATE_factory_boot */
-		if (gm.boot_mode == 1 || gm.boot_mode == 4
-			|| gm.boot_mode == 5 || gm.boot_mode == 6) {
+		if (gm.boot_mode == 4
+			|| gm.boot_mode == 6) {
 			val->intval = 75;
 			break;
 		}

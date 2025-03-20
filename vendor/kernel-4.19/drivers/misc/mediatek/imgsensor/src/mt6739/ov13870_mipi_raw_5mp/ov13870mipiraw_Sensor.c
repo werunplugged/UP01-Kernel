@@ -550,7 +550,7 @@ static void set_shutter(kal_uint32 shutter)
 
 	if (shutter >
 		(imgsensor_info.max_frame_length - imgsensor_info.margin)) {
-		/* long expsoure */
+		/* long exposure */
 		LOG_INF("Long exposure, shutter = %d\n", shutter);
 
 		long_exp_times = shutter / (imgsensor_info.max_frame_length
@@ -582,7 +582,7 @@ static void set_shutter(kal_uint32 shutter)
 		LOG_INF("new shutter = %u, new line length = %u\n",
 			shutter, line_length);
 	} else {
-		/* normal expsoure */
+		/* normal exposure */
 		LOG_INF("Normal exposure, shutter = %d\n", shutter);
 
 		spin_lock(&imgsensor_drv_lock);
@@ -1271,14 +1271,14 @@ static kal_uint32 get_info(enum MSDK_SCENARIO_ID_ENUM scenario_id,
 	LOG_INF("scenario_id = %d\n", scenario_id);
 
 	sensor_info->SensorClockPolarity = SENSOR_CLOCK_POLARITY_LOW;
-		/* not use */
+		/* Not used */
 	sensor_info->SensorClockFallingPolarity = SENSOR_CLOCK_POLARITY_LOW;
 		/* inverse with datasheet */
 	sensor_info->SensorHsyncPolarity = SENSOR_CLOCK_POLARITY_LOW;
 	sensor_info->SensorVsyncPolarity = SENSOR_CLOCK_POLARITY_LOW;
-	sensor_info->SensorInterruptDelayLines = 4;	/* not use */
-	sensor_info->SensorResetActiveHigh = FALSE;	/* not use */
-	sensor_info->SensorResetDelayCount = 5;	/* not use */
+	sensor_info->SensorInterruptDelayLines = 4;	/* Not used */
+	sensor_info->SensorResetActiveHigh = FALSE;	/* Not used */
+	sensor_info->SensorResetDelayCount = 5;	/* Not used */
 
 	sensor_info->SensroInterfaceType = imgsensor_info.sensor_interface_type;
 	sensor_info->MIPIsensorType = imgsensor_info.mipi_sensor_type;
@@ -1301,7 +1301,7 @@ static kal_uint32 get_info(enum MSDK_SCENARIO_ID_ENUM scenario_id,
 	sensor_info->Custom4DelayFrame = imgsensor_info.custom4_delay_frame;
 	sensor_info->Custom5DelayFrame = imgsensor_info.custom5_delay_frame;
 
-	sensor_info->SensorMasterClockSwitch = 0;	/* not use */
+	sensor_info->SensorMasterClockSwitch = 0;	/* Not used */
 	sensor_info->SensorDrivingCurrent = imgsensor_info.isp_driving_current;
 
 	sensor_info->AEShutDelayFrame = imgsensor_info.ae_shut_delay_frame;
@@ -1331,11 +1331,11 @@ static kal_uint32 get_info(enum MSDK_SCENARIO_ID_ENUM scenario_id,
 
 	sensor_info->SensorMIPILaneNumber = imgsensor_info.mipi_lane_num;
 	sensor_info->SensorClockFreq = imgsensor_info.mclk;
-	sensor_info->SensorClockDividCount = 3;	/* not use */
+	sensor_info->SensorClockDividCount = 3;	/* Not used */
 	sensor_info->SensorClockRisingCount = 0;
-	sensor_info->SensorClockFallingCount = 2;	/* not use */
-	sensor_info->SensorPixelClockCount = 3;	/* not use */
-	sensor_info->SensorDataLatchCount = 2;	/* not use */
+	sensor_info->SensorClockFallingCount = 2;	/* Not used */
+	sensor_info->SensorPixelClockCount = 3;	/* Not used */
+	sensor_info->SensorDataLatchCount = 2;	/* Not used */
 
 	sensor_info->MIPIDataLowPwr2HighSpeedTermDelayCount = 0;
 	sensor_info->MIPICLKLowPwr2HighSpeedTermDelayCount = 0;

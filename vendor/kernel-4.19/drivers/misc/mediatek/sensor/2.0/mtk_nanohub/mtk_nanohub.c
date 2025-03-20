@@ -30,6 +30,8 @@
 #include "mtk_nanohub_ipi.h"
 
 extern int __init nanohub_init(void);
+extern int get_old_machine_identification_result(void);
+static int old_result = 0;
 
 /* ALGIN TO SCP SENSOR_IPI_SIZE AT FILE CONTEXTHUB_FW.H, ALGIN
  * TO SCP_SENSOR_HUB_DATA UNION, ALGIN TO STRUCT DATA_UNIT_T
@@ -1657,6 +1659,34 @@ static void mtk_nanohub_restoring_sensor(int sensor_id)
 	}
 }
 
+#ifdef CONFIG_CUST_DEVICE_INFO_SUPPORT
+#ifdef CONFIG_NANOHUB
+static char accelhub_used[16];
+static char alspshub_used[16];
+static char maghub_used[16];
+static char barohub_used[16];
+static char sarhub_used[16];
+#endif
+
+typedef enum 
+{ 
+    DEVICE_SUPPORTED = 0,        
+    DEVICE_USED = 1,
+}compatible_type;
+
+extern int up_set_accsensor_device_used(char * module_name, int pdata);
+extern int up_accsensor_device_add(struct sensor_info* maccsensor, compatible_type isUsed);
+
+extern int up_set_msensor_device_used(char * module_name, int pdata);
+extern int up_msensor_device_add(struct sensor_info* mmsensor, compatible_type isUsed);
+
+extern int up_set_alspssensor_device_used(char * module_name, int pdata);
+extern int up_alspssensor_device_add(struct sensor_info* malspssensor, compatible_type isUsed);
+
+extern int up_set_sarsensor_device_used(char * module_name, int pdata);
+extern int up_sarsensor_device_add(struct sensor_info* sarsensor, compatible_type isUsed);
+#endif
+
 static void mtk_nanohub_get_devinfo(void)
 {
 	struct mtk_nanohub_device *dev = mtk_nanohub_dev;
@@ -1679,6 +1709,39 @@ static void mtk_nanohub_get_devinfo(void)
 		} else {
 			find_sensor = true;
 			strlcpy(info.name, hubinfo.name, sizeof(info.name));
+
+#ifdef CONFIG_CUST_DEVICE_INFO_SUPPORT
+#ifdef CONFIG_NANOHUB
+			if(info.sensor_type == SENSOR_TYPE_ACCELEROMETER) {
+				strlcpy(accelhub_used, info.name, sizeof(accelhub_used));
+				up_accsensor_device_add(&info,DEVICE_SUPPORTED);
+				up_set_accsensor_device_used(accelhub_used,DEVICE_USED);
+			}
+
+
+			if(info.sensor_type == SENSOR_TYPE_LIGHT) {
+				strlcpy(alspshub_used, info.name, sizeof(alspshub_used));
+				up_alspssensor_device_add(&info,DEVICE_SUPPORTED);
+				up_set_alspssensor_device_used(alspshub_used,DEVICE_USED);
+			}
+
+			if(info.sensor_type == SENSOR_TYPE_MAGNETIC_FIELD) {
+				strlcpy(maghub_used, info.name, sizeof(maghub_used));
+				up_msensor_device_add(&info,DEVICE_SUPPORTED);
+				up_set_msensor_device_used(maghub_used,DEVICE_USED);
+			}
+
+			if(info.sensor_type == SENSOR_TYPE_SAR) {
+				strlcpy(sarhub_used, info.name, sizeof(sarhub_used));
+				up_sarsensor_device_add(&info,DEVICE_SUPPORTED);
+				up_set_sarsensor_device_used(sarhub_used,DEVICE_USED);
+			}
+			
+			if(info.sensor_type == SENSOR_TYPE_PRESSURE) {
+				strlcpy(barohub_used, info.name, sizeof(barohub_used));
+			}
+#endif
+#endif
 			/* restore mag lib info */
 			if (sensor == SENSOR_TYPE_MAGNETIC_FIELD) {
 				strlcpy(info.vendor,
@@ -2003,6 +2066,9 @@ static int mtk_nanohub_config(struct hf_device *hfdev,
 			length = sizeof(device->proximity_config_data);
 		spin_lock(&config_data_lock);
 		memcpy(device->proximity_config_data, data, length);
+		device->proximity_config_data[0] = old_result;
+		printk("%s: old_machine_identification_result= %d\n", __func__, device->proximity_config_data[0]);
+		memcpy(data, device->proximity_config_data, length);
 		spin_unlock(&config_data_lock);
 		break;
 	case ID_PRESSURE:
@@ -2572,11 +2638,42 @@ static ssize_t trace_store(struct device_driver *ddri,
 err_out:
 	return count;
 }
+int alspshub_read_ps(uint32_t *ps)
+{
+	int res;
+	struct data_unit_t data_t;
+
+	res = mtk_nanohub_get_data_from_hub(ID_PROXIMITY, &data_t);
+	if (res < 0) {
+		*ps = -1;
+		pr_err("sensor_get_data_from_hub fail, (ID: %d)\n",
+			ID_PROXIMITY);
+		return -1;
+	}
+
+	*ps = data_t.proximity_t.steps;
+
+	return 0;
+}
+
+static ssize_t ps_show(struct device_driver *ddri, char *buf)
+{
+	ssize_t res = 0;
+	uint32_t ps;
+
+	res = alspshub_read_ps(&ps);
+	if (res)
+		return snprintf(buf, PAGE_SIZE, "ERROR: %d\n", (int)res);
+	else
+		return snprintf(buf, PAGE_SIZE, "0x%04x\n", ps);
+}
 
 static DRIVER_ATTR_RW(trace);
+static DRIVER_ATTR_RO(ps);
 
 static struct driver_attribute *mtk_nanohub_attrs[] = {
 	&driver_attr_trace,
+	&driver_attr_ps,
 };
 
 static int mtk_nanohub_create_attr(struct device_driver *driver)
@@ -2734,6 +2831,9 @@ static int mtk_nanohub_probe(struct platform_device *pdev)
 		pr_err("register PM notifier fail, err:%d\n", err);
 		goto exit_attr;
 	}
+
+	old_result = get_old_machine_identification_result();
+	printk("%s: old_machine_identification_result= %d\n", __func__, old_result);
 
 	pr_info("init done, data_unit_t:%d, SCP_SENSOR_HUB_DATA:%d\n",
 		(int)sizeof(struct data_unit_t),

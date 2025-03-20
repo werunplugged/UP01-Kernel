@@ -63,6 +63,10 @@ struct rtc_pll_info {
 	long pll_clock;     /* base PLL frequency */
 };
 
+struct up_bbchip {
+       char bbchip_name[128];
+};
+
 /*
  * ioctl calls that are permitted to the /dev/rtc interface, if
  * any of the RTC drivers are enabled.
@@ -76,6 +80,7 @@ struct rtc_pll_info {
 #define RTC_PIE_OFF	_IO('p', 0x06)	/* ... off			*/
 #define RTC_WIE_ON	_IO('p', 0x0f)  /* Watchdog int. enable on	*/
 #define RTC_WIE_OFF	_IO('p', 0x10)  /* ... off			*/
+#define RTC_UP_GET_BBCHIP     _IOR('p', 0x30, struct up_bbchip) /* Read bbchip*/
 
 #define RTC_ALM_SET	_IOW('p', 0x07, struct rtc_time) /* Set alarm time  */
 #define RTC_ALM_READ	_IOR('p', 0x08, struct rtc_time) /* Read alarm time */

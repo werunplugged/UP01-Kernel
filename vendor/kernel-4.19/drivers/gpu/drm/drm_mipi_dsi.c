@@ -35,6 +35,17 @@
 
 #include <video/mipi_display.h>
 
+#ifdef CONFIG_CUST_DEVICE_INFO_SUPPORT
+
+extern int up_set_lcm_device_used(char * module_name, int pdata);
+typedef enum 
+{ 
+    DEVICE_SUPPORTED = 0,        
+    DEVICE_USED = 1,
+}compatible_type;
+extern int up_lcm_device_add(struct mipi_dsi_driver* nLcm, compatible_type isUsed);
+#endif
+
 /**
  * DOC: dsi helpers
  *
@@ -1139,6 +1150,10 @@ int mipi_dsi_driver_register_full(struct mipi_dsi_driver *drv,
 		drv->driver.remove = mipi_dsi_drv_remove;
 	if (drv->shutdown)
 		drv->driver.shutdown = mipi_dsi_drv_shutdown;
+
+#ifdef CONFIG_CUST_DEVICE_INFO_SUPPORT
+	up_lcm_device_add(drv,DEVICE_SUPPORTED);
+#endif
 
 	return driver_register(&drv->driver);
 }

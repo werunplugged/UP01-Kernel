@@ -73,7 +73,8 @@ static void ufs_mtk_auto_hibern8(struct ufs_hba *hba, bool enable);
 	ufs_mtk_smc(UFS_MTK_SIP_DEVICE_RESET, high, res)
 
 int ufsdbg_perf_dump = 0;
-static struct ufs_hba *ufs_mtk_hba;
+
+struct ufs_hba *ufs_mtk_hba;
 
 static const struct ufs_mtk_host_cfg ufs_mtk_mt8183_cfg = {
 	.quirks = UFS_MTK_HOST_QUIRK_BROKEN_AUTO_HIBERN8

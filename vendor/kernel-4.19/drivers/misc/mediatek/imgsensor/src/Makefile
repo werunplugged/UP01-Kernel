@@ -31,4 +31,4 @@ CUSTOM_KERNEL_FLAGS := $(addprefix -D, $(shell echo \
 subdir-ccflags-y += $(CUSTOM_KERNEL_FLAGS)
 
 obj-y += $(subst ",,$(CONFIG_MTK_PLATFORM_SENSOR))/
-
+obj-$(CONFIG_LDO_WL2864C) += wl2864c.o

@@ -1,0 +1,2 @@
+CONFIG_TOUCHSCREEN_FTS=y
+obj-$(CONFIG_TOUCHSCREEN_FTS) += focaltech_upgrade_ft8201.o

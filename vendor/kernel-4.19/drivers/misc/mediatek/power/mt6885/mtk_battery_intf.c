@@ -45,9 +45,7 @@ signed int battery_get_uisoc(void)
 	if (gm != NULL) {
 		int boot_mode = gm->boot_mode;
 
-		if ((boot_mode == META_BOOT) ||
-			(boot_mode == ADVMETA_BOOT) ||
-			(boot_mode == FACTORY_BOOT) ||
+		if ((boot_mode == FACTORY_BOOT) ||
 			(boot_mode == ATE_FACTORY_BOOT))
 			return 75;
 		else if (boot_mode == 0)
@@ -149,12 +147,10 @@ signed int battery_get_uisoc(void)
 	if (gm != NULL) {
 		int boot_mode = gm->boot_mode;
 
-		if ((boot_mode == META_BOOT) ||
-			(boot_mode == ADVMETA_BOOT) ||
-			(boot_mode == FACTORY_BOOT) ||
+		if ((boot_mode == FACTORY_BOOT) ||
 			(boot_mode == ATE_FACTORY_BOOT))
 			return 75;
-		else if (boot_mode == 0)
+		else 
 			return gm->ui_soc;
 	}
 

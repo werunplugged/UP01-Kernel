@@ -198,6 +198,8 @@ struct ufs_mtk_host {
 	bool qos_enabled;
 };
 
+extern struct ufs_hba *ufs_mtk_hba;
+
 struct ufs_hba *ufs_mtk_get_hba(void);
 
 struct rpmb_dev *ufs_mtk_rpmb_get_raw_dev(void);

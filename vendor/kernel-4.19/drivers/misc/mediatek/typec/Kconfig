@@ -55,4 +55,13 @@ config OCP96011_I2C
 	  multimedia switch. The OCP96011 supports USB2.0
 	  signal, analog audio, sideband use wires and analog
 	  microphone signal.
+
+config USBSWITCH_HL5280
+	tristate "USBSWITCH HL5280 driver"
+	depends on I2C
+	default n
+	  ---help---
+	  USBSWITCH driver support for MediaTek SOC.
+	  If you want to use This driver, say Y or M here.
+	  If unsure, say N.
 source "drivers/misc/mediatek/typec/tcpc/Kconfig"

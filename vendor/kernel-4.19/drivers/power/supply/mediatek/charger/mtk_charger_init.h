@@ -6,6 +6,8 @@
 #ifndef __MTK_CHARGER_INIT_H__
 #define __MTK_CHARGER_INIT_H__
 
+#include <linux/cust_include/cust_project_all_config.h>
+
 #define BATTERY_CV 4350000
 #define V_CHARGER_MAX 6500000 /* 6.5 V */
 #define V_CHARGER_MIN 4600000 /* 4.6 V */
@@ -27,6 +29,11 @@
 #define V_CHARGER_MIN_1 4400000 /* 4.4 V */
 #define V_CHARGER_MIN_2 4200000 /* 4.2 V */
 #define MAX_DMIVR_CHARGER_CURRENT 1400000 /* 1.4 A */
+
+#ifdef CONFIG_WIRELESS_POWER_MT5728
+#define ECH_WLS_CHARGER_CURRENT			3000000 /* 3000mA */
+#define ECH_WLS_CHARGER_INPUT_CURRENT		500000  /* 500mA */
+#endif
 
 /* sw jeita */
 #define JEITA_TEMP_ABOVE_T4_CV	4240000

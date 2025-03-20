@@ -1418,6 +1418,15 @@ config SND_SOC_RT5509
 	  multi-band DRC, equalizer function. It would
 	  be set to yes if device with RT5509 on it.
 
+config SND_SOC_AW882XX_2PA
+       tristate "AWINIC speaker AW882XX_2PA amplifier"
+       depends on I2C
+       help
+         Config of AWINIC. It is a Smart power
+         amplifier which contain speaker protection,
+         multi-band DRC, equalizer function. It would
+         be set to yes if device with AWINIC on it.
+
 config SND_RICHTEK_SPM
 	bool "Richtek SPM Class"
 	help

@@ -9,6 +9,10 @@
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/spmi/spmi.h>
 #include <dt-bindings/pinctrl/mt6885-pinfunc.h>
+#include <generated/autoconf.h>
+#include "cust_include/cust_project_all_config.h"
+#include "cust_include/cust_board_dts_config.h"
+
 
 &reserved_memory {
 };
@@ -73,7 +77,11 @@
 		compatible = "mediatek,vibrator";
 		vib_timer = <25>;
 		vib_limit = <9>;
+	#ifdef __CUST_VIBR_VALUE_SUPPORT__
+		vib_vol= <__CUST_VIBR_VALUE_SUPPORT__>;	
+	#else
 		vib_vol= <9>;
+	#endif
 	};
 	usb_c_pinctrl:usb_c_pinctrl {
 		compatible = "mediatek,usb_c_pinctrl";
@@ -84,7 +92,7 @@
 &pio {
 	mtkfb_pins_lcd_bias_enp1: lcd_bias_enp1_gpio {
 		pins_cmd_dat {
-			pinmux = <PINMUX_GPIO28__FUNC_GPIO28>;
+			pinmux = <__CUST_GPIO_LCD_BIAS_ENP_PINMUX__>;
 			slew-rate = <1>;
 			output-high;
 		};
@@ -92,7 +100,7 @@
 
 	mtkfb_pins_lcd_bias_enp0: lcd_bias_enp0_gpio {
 		pins_cmd_dat {
-			pinmux = <PINMUX_GPIO28__FUNC_GPIO28>;
+			pinmux = <__CUST_GPIO_LCD_BIAS_ENP_PINMUX__>;
 			slew-rate = <1>;
 			output-low;
 		};
@@ -100,7 +108,7 @@
 
 	mtkfb_pins_lcd_bias_enn1: lcd_bias_enn1_gpio {
 		pins_cmd_dat {
-			pinmux = <PINMUX_GPIO29__FUNC_GPIO29>;
+			pinmux = <__CUST_GPIO_LCD_BIAS_ENN_PINMUX__>;
 			slew-rate = <1>;
 			output-high;
 		};
@@ -108,7 +116,7 @@
 
 	mtkfb_pins_lcd_bias_enn0: lcd_bias_enn0_gpio {
 		pins_cmd_dat {
-			pinmux = <PINMUX_GPIO29__FUNC_GPIO29>;
+			pinmux = <__CUST_GPIO_LCD_BIAS_ENN_PINMUX__>;
 			slew-rate = <1>;
 			output-low;
 		};
@@ -116,7 +124,7 @@
 
 	mtkfb_pins_lcm_rst_out1_gpio: lcm_rst_out1_gpio {
 		pins_cmd_dat {
-			pinmux = <PINMUX_GPIO42__FUNC_GPIO42>;
+			pinmux = <__CUST_GPIO_LCD_RST_OUT_PINMUX__>;
 			slew-rate = <1>;
 			output-high;
 		};
@@ -124,7 +132,7 @@
 
 	mtkfb_pins_lcm_rst_out0_gpio: lcm_rst_out0_gpio {
 		pins_cmd_dat {
-			pinmux = <PINMUX_GPIO42__FUNC_GPIO42>;
+			pinmux = <__CUST_GPIO_LCD_RST_OUT_PINMUX__>;
 			slew-rate = <1>;
 			output-low;
 		};
@@ -180,7 +188,7 @@
 				0x5 0x3 0x3 0x5 0xe>;
 	accdet-plugout-debounce = <1>;
 	/*1:ACC mode, 2:low cost without in bias, 6:low cost with in bias*/
-	accdet-mic-mode = <2>;
+	accdet-mic-mode = <__CUST_ACCDET_MIC_MODE__>;
 	/*0--MD_MAX--UP_MAX--DW_MAX*/
 	headset-three-key-threshold = <0 80 220 400>;
 	headset-three-key-threshold-CDD = <0 121 192 600>;
@@ -221,7 +229,7 @@
 		};
 	};
 }; /* IRTX GPIO Settings -End */
-
+#if 0
 /* FINGERPRINT start */
 &spi1 {
 	#address-cells = <1>;
@@ -281,16 +289,16 @@
 	mt6360,intr_gpio_num = <24>; // direct defined GPIO num //
 	mt6360,intr_gpio = <&pio 24 0x0>;
 };
-
+#endif
 &mt6360_pmic  {
 	pwr_off_seq = [04 00 02 02];
 };
-
+#if 0
 &mt6360_typec {
 	mt6360pd,intr_gpio_num = <25>; /* direct defined GPIO num */
 	mt6360pd,intr_gpio = <&pio 25 0x0>;
 };
-
+#endif
 /* USB SWITCH GPIO start */
 &pio {
 	usb_default: usb_default {
@@ -467,6 +475,29 @@
 		};
 	};
 };
+	&usb_boost_manager {
+#ifdef __CUST_WIRELESS_CHARGE_SUPPORT__
+	#if __CUST_WIRELESS_CHARGE_SUPPORT__
+		wireless_charge_gpio = <&pio __CUST_WIRELESS_CHARGE_GPIO__ 0x0>;
+	#endif
+#endif
+	#ifdef __CUST_OTG_SELECT_GPIO__
+    	#if __CUST_OTG_SELECT_GPIO__
+			otg_gpio_select = <&pio __CUST_OTG_SELECT_GPIO__ 0x0>;
+		#endif
+	#endif		
+			status = "okay";
+	};
+
+
+#ifdef __CUST_UVC_VBUS_GPIO__
+	&extcon_usb {
+		id-gpios = <&pio 113 0x0>;	
+		uvc_vbus_gpio = <&pio __CUST_UVC_VBUS_GPIO__ 0x0>;
+		uvc_switch_gpio = <&pio 97 0x0>;	
+		status = "okay";
+	};
+#endif
 
 &gps {
 	pinctrl-names = "default",
@@ -492,12 +523,32 @@
 	#address-cells = <1>;
 	#size-cells = <0>;
 	panel1@0 {
+	#ifdef CONFIG_DRM_PANEL_RM692F0_DPHY_CMD
+		compatible = "boe,rm692f0,cmd,120hz";
+	#endif
+	#ifdef CONFIG_DRM_PANEL_TRULY_TD4330_VDO
 		compatible = "truly,td4330,vdo";
+	#endif
+	#ifdef CONFIG_DRM_PANEL_NT37701_DPHY_CMD
+		compatible = "boe,nt37701c,cmd,120hz";
+	#endif
 		reg = <0>;
-		pm-enable-gpios = <&pio 41 0>;
+		/*pm-enable-gpios = <&pio 41 0>;*/
 		reset-gpios = <&pio 42 0>;
-		bias-gpios = <&pio 28 0>,
-			<&pio 29 0>;
+		bias-gpios = <&pio 27 0>,
+			<&pio 28 0>;
+	#ifdef __CUST_AMOLED_DVDD_LDO_EN_PIN_NUM__
+		dvdd-gpios = <&pio __CUST_AMOLED_DVDD_LDO_EN_PIN_NUM__ 0>; //lcm 1.2v 
+	#endif
+	#ifdef __CUST_AMOLED_VCI_LDO_EN_PIN_NUM__
+		vci-gpios = <&pio __CUST_AMOLED_VCI_LDO_EN_PIN_NUM__ 0>;	 //lcm 3.3v 
+	#endif
+	#ifdef __CUST_AMOLED_TSP_AVDD_LDO_EN_PIN_NUM__
+		tsp_avdd-gpios = <&pio __CUST_AMOLED_TSP_AVDD_LDO_EN_PIN_NUM__ 0>; //tp 3.3v 
+	#endif
+	#ifdef __CUST_AMOLED_TSP_VDDI_LDO_EN_PIN_NUM__
+		tsp_vddi-gpios = <&pio __CUST_AMOLED_TSP_VDDI_LDO_EN_PIN_NUM__ 0>; //tp 1.8v	
+	#endif
 		pinctrl-names = "default";
 		port {
 			panel_in: endpoint {
@@ -506,12 +557,14 @@
 		};
 	};
 	panel2@0 {
+	#ifdef CONFIG_DRM_PANEL_TRULY_FT8756_VDO
 		compatible = "truly,ft8756,vdo";
+	#endif
 		reg = <1>;
-		pm-enable-gpios = <&pio 41 0>;
+		/*pm-enable-gpios = <&pio 41 0>;*/
 		reset-gpios = <&pio 42 0>;
-		bias-gpios = <&pio 28 0>,
-			<&pio 29 0>;
+		bias-gpios = <&pio 27 0>,
+			<&pio 28 0>;
 		pinctrl-names = "default";
 		port {
 			panel_in2: endpoint {
@@ -528,12 +581,7 @@
 	};
 };
 
-/* CAMERA specify sensor */
-&kd_camera_hw1 {
-	cam2_enable_sensor = "s5k3m5sx_mipi_raw s5kjd1_mipi_raw";
-	cam4_enable_sensor = "imx481_mipi_raw";
-};
-/* CAMERA specify sensor end */
+
 
 /* usb typec mux */
 &pio {
@@ -618,4 +666,5 @@
 #include "mediatek/cust_mt6893_touch.dtsi"
 #include "mediatek/cust_mt6885_camera.dtsi"
 #include <k6893v1_64_k419/cust.dtsi>
+#include "mediatek/up_board_mt6893.dts"
 /*End of this file, DO NOT ADD ANYTHING HERE*/

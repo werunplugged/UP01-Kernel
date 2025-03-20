@@ -18,6 +18,8 @@
 #include "../common/mtk-sp-spk-amp.h"
 #include "../common/mtk-afe-platform-driver.h"
 
+#include <linux/gpio/consumer.h>
+
 /*
  * if need additional control for the ext spk amp that is connected
  * after Lineout Buffer / HP Buffer on the codec, put the control in
@@ -25,6 +27,7 @@
  */
 #define EXT_SPK_AMP_W_NAME "Ext_Speaker_Amp"
 
+struct gpio_desc *hac_desc;
 #ifdef CONFIG_SND_SOC_CS35L43
 static struct snd_soc_dai_link_component cs35l43_codec[] = {
 	{
@@ -74,6 +77,8 @@ static const struct soc_enum mt6885_spk_type_enum[] = {
 			    mt6885_spk_i2s_type_str),
 };
 
+
+
 static int mt6885_spk_type_get(struct snd_kcontrol *kcontrol,
 			       struct snd_ctl_elem_value *ucontrol)
 {
@@ -103,6 +108,41 @@ static int mt6885_spk_i2s_in_type_get(struct snd_kcontrol *kcontrol,
 	ucontrol->value.integer.value[0] = idx;
 	return 0;
 }
+
+static int hac_en_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	if(hac_desc)
+		ucontrol->value.integer.value[0] = gpiod_get_value_cansleep(hac_desc);
+	else
+		ucontrol->value.integer.value[0] = 0;
+
+	pr_debug("hac en %ld", ucontrol->value.integer.value[0]);
+
+	return 0;
+}
+
+static int hac_en_set(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_mixer_control *mc =
+		(struct soc_mixer_control *)kcontrol->private_value;
+	
+
+	if (ucontrol->value.integer.value[0] > mc->max) {
+		pr_debug("set val %ld overflow %d",
+			ucontrol->value.integer.value[0], mc->max);
+		return 0;
+	}
+	if(hac_desc)
+		gpiod_set_value(hac_desc, ucontrol->value.integer.value[0]);
+
+
+	pr_debug("%s en %ld", __func__,ucontrol->value.integer.value[0]);
+
+	return 0;
+}
+
 
 static int mt6885_mt6359_spk_amp_event(struct snd_soc_dapm_widget *w,
 				       struct snd_kcontrol *kcontrol,
@@ -145,6 +185,8 @@ static const struct snd_kcontrol_new mt6885_mt6359_controls[] = {
 		     mt6885_spk_i2s_out_type_get, NULL),
 	SOC_ENUM_EXT("MTK_SPK_I2S_IN_TYPE_GET", mt6885_spk_type_enum[1],
 		     mt6885_spk_i2s_in_type_get, NULL),
+	SOC_SINGLE_EXT("hac_en", SND_SOC_NOPM, 0, 1, 0,
+		     hac_en_get, hac_en_set),
 };
 
 /*
@@ -1339,6 +1381,8 @@ static int mt6885_mt6359_dev_probe(struct platform_device *pdev)
 	if (ret)
 		dev_err(&pdev->dev, "%s snd_soc_register_card fail %d\n",
 			__func__, ret);
+	hac_desc = devm_gpiod_get(&pdev->dev, "hac", GPIOD_OUT_LOW);
+
 	return ret;
 }
 

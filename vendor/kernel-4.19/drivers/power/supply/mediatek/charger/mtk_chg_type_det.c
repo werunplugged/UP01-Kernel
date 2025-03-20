@@ -70,6 +70,15 @@ static const unsigned int usb_extcon_cable[] = {
 };
 #endif
 
+#ifdef CONFIG_WIRELESS_POWER_MT5728
+extern int reserse_charge_online;
+extern int is_wireless_chipen_pin_high(void);
+extern void updata_wireless_online(void);
+
+extern void up_wireless_gpio_set(bool en);
+static enum charger_type g_chr_type;
+#endif
+
 void __attribute__((weak)) fg_charger_in_handler(void)
 {
 	pr_notice("%s not defined\n", __func__);
@@ -133,6 +142,12 @@ static void dump_charger_name(enum charger_type type)
 	case APPLE_2_1A_CHARGER:
 	case APPLE_1_0A_CHARGER:
 	case APPLE_0_5A_CHARGER:
+
+#ifdef CONFIG_WIRELESS_POWER_MT5728
+	case WIRELESS_CHARGER:
+	case REVERSE_CHARGER:
+#endif
+
 		pr_info("%s: charger type: %d, %s\n", __func__, type,
 			mtk_chg_type_name[type]);
 		break;
@@ -162,6 +177,11 @@ struct mt_charger {
 	#endif
 	bool chg_online; /* Has charger in or not */
 	enum charger_type chg_type;
+	#ifdef CONFIG_WIRELESS_POWER_MT5728
+	struct power_supply_desc wireless_desc;
+	struct power_supply_config wireless_cfg;
+	struct power_supply *wireless_psy;
+	#endif
 };
 
 static int mt_charger_online(struct mt_charger *mtk_chg)
@@ -273,6 +293,26 @@ static void usb_extcon_detect_cable(struct work_struct *work)
 }
 #endif
 
+
+#ifdef CONFIG_WIRELESS_POWER_MT5728
+static int is_ech_wls_online(void)
+{
+	int ret;
+	union power_supply_propval val;
+	struct power_supply *psy = power_supply_get_by_name("mt5728_wireless");
+
+	val.intval = 0;
+
+	ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_ONLINE, &val);
+	if (!ret) {
+		pr_info("is_ech_wls_online: %d.\n", val.intval);
+		return val.intval;
+	} else {
+		return 0;
+	}
+}
+#endif
+
 static int mt_charger_set_property(struct power_supply *psy,
 	enum power_supply_property psp, const union power_supply_propval *val)
 {
@@ -301,6 +341,26 @@ static int mt_charger_set_property(struct power_supply *psy,
 		return 0;
 	case POWER_SUPPLY_PROP_CHARGE_TYPE:
 		mtk_chg->chg_type = val->intval;
+
+	#ifdef CONFIG_WIRELESS_POWER_MT5728
+        	updata_wireless_online();
+		if(is_ech_wls_online()){
+			mtk_chg->chg_type = WIRELESS_CHARGER;
+			g_chr_type = WIRELESS_CHARGER;
+		}else{	
+			g_chr_type = val->intval;
+			if((reserse_charge_online)&& (is_wireless_chipen_pin_high() == 0))
+			{
+				printk("enter reserse charge\n");
+				mtk_chg->chg_type = 0;
+				g_chr_type = 0;
+			}
+			else{
+				up_wireless_gpio_set(false);
+			}
+		}
+	#endif
+
 		if (mtk_chg->chg_type != CHARGER_UNKNOWN)
 			charger_manager_force_disable_power_path(
 				cti->chg_consumer, MAIN_CHARGER, false);
@@ -316,9 +376,15 @@ static int mt_charger_set_property(struct power_supply *psy,
 
 	if (!cti->ignore_usb) {
 		/* usb */
+		#ifdef CONFIG_WIRELESS_POWER_MT5728
+		if ((mtk_chg->chg_type == STANDARD_HOST) ||
+			(mtk_chg->chg_type == CHARGING_HOST) ||
+			(mtk_chg->chg_type == NONSTANDARD_CHARGER) || (mtk_chg->chg_type == WIRELESS_CHARGER)|| ((reserse_charge_online) && (is_wireless_chipen_pin_high() == 0))) {
+		#else
 		if ((mtk_chg->chg_type == STANDARD_HOST) ||
 			(mtk_chg->chg_type == CHARGING_HOST) ||
 			(mtk_chg->chg_type == NONSTANDARD_CHARGER)) {
+		#endif
 				mt_usb_connect_v1();
 			#ifdef CONFIG_EXTCON_USB_CHG
 			info->vbus_state = 1;
@@ -343,7 +409,9 @@ static int mt_charger_set_property(struct power_supply *psy,
 #endif
 	power_supply_changed(mtk_chg->ac_psy);
 	power_supply_changed(mtk_chg->usb_psy);
-
+	#ifdef CONFIG_WIRELESS_POWER_MT5728
+	power_supply_changed(mtk_chg->wireless_psy);
+	#endif
 	return 0;
 }
 
@@ -359,9 +427,23 @@ static int mt_ac_get_property(struct power_supply *psy,
 		if (mtk_chg->chg_type != CHARGER_UNKNOWN)
 			val->intval = 1;
 		/* Reset to 0 if charger type is USB */
-		if ((mtk_chg->chg_type == STANDARD_HOST) ||
-			(mtk_chg->chg_type == CHARGING_HOST))
+#ifndef CONFIG_WIRELESS_POWER_MT5728
+                if ((mtk_chg->chg_type == STANDARD_HOST) ||
+                        (mtk_chg->chg_type == CHARGING_HOST))
+#else
+			if(g_chr_type == NONSTANDARD_CHARGER)
+				mdelay(200);
+				
+		
+               	if ((g_chr_type == STANDARD_HOST) || (g_chr_type == CHARGING_HOST) || ((reserse_charge_online) && (is_wireless_chipen_pin_high() == 0)) || (g_chr_type == WIRELESS_CHARGER))
+#endif
 			val->intval = 0;
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		val->intval = battery_get_bat_current()*100;
+		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
+		val->intval = battery_get_vbus() * 1000;
 		break;
 	default:
 		return -EINVAL;
@@ -395,13 +477,38 @@ static int mt_usb_get_property(struct power_supply *psy,
 
 	return 0;
 }
+#ifdef CONFIG_WIRELESS_POWER_MT5728
+static int mt_wireless_get_property(struct power_supply *psy,
+	enum power_supply_property psp, union power_supply_propval *val)
+{
+	struct mt_charger *mtk_chg = power_supply_get_drvdata(psy);
 
+	switch (psp) {
+		case POWER_SUPPLY_PROP_ONLINE:
+		val->intval = 0;
+		if (mtk_chg->chg_type == WIRELESS_CHARGER ){
+			val->intval = 1;
+		}
+		else{
+			printk("chg_type: %d, 0=CHARGER_UNKNOWN,1=STANDARD_HOST,2=CHARGING_HOST,3=NONSTANDARD_CHARGER,4=STANDARD_CHARGER,5=APPLE_2_1A_CHARGER,6=APPLE_1_0A_CHARGER,7=APPLE_0_5A_CHARGER,8=WIRELESS_CHARGER,9=REVERSE_CHARGER\n",mtk_chg->chg_type); 
+			val->intval = 0;
+		}
+		break;
+		default:
+			return -EINVAL;
+	}
+
+	return 0;
+}
+#endif
 static enum power_supply_property mt_charger_properties[] = {
 	POWER_SUPPLY_PROP_ONLINE,
 };
 
 static enum power_supply_property mt_ac_properties[] = {
 	POWER_SUPPLY_PROP_ONLINE,
+	POWER_SUPPLY_PROP_CURRENT_MAX,
+	POWER_SUPPLY_PROP_VOLTAGE_MAX,
 };
 
 static enum power_supply_property mt_usb_properties[] = {
@@ -409,6 +516,11 @@ static enum power_supply_property mt_usb_properties[] = {
 	POWER_SUPPLY_PROP_CURRENT_MAX,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
 };
+#ifdef CONFIG_WIRELESS_POWER_MT5728
+static enum power_supply_property mt_wireless_properties[] = {
+	POWER_SUPPLY_PROP_ONLINE,
+};
+#endif
 
 static void tcpc_power_off_work_handler(struct work_struct *work)
 {
@@ -757,7 +869,14 @@ static int mt_charger_probe(struct platform_device *pdev)
 	mt_chg->usb_desc.num_properties = ARRAY_SIZE(mt_usb_properties);
 	mt_chg->usb_desc.get_property = mt_usb_get_property;
 	mt_chg->usb_cfg.drv_data = mt_chg;
-
+#ifdef CONFIG_WIRELESS_POWER_MT5728
+	mt_chg->wireless_desc.name = "wireless";
+	mt_chg->wireless_desc.type = POWER_SUPPLY_TYPE_WIRELESS;
+	mt_chg->wireless_desc.properties = mt_wireless_properties;
+	mt_chg->wireless_desc.num_properties = ARRAY_SIZE(mt_wireless_properties);
+	mt_chg->wireless_desc.get_property = mt_wireless_get_property;
+	mt_chg->wireless_cfg.drv_data = mt_chg;
+#endif
 	mt_chg->chg_psy = power_supply_register(&pdev->dev,
 		&mt_chg->chg_desc, &mt_chg->chg_cfg);
 	if (IS_ERR(mt_chg->chg_psy)) {
@@ -784,7 +903,16 @@ static int mt_charger_probe(struct platform_device *pdev)
 		ret = PTR_ERR(mt_chg->usb_psy);
 		goto err_usb_psy;
 	}
-
+#ifdef CONFIG_WIRELESS_POWER_MT5728
+	mt_chg->wireless_psy = power_supply_register(&pdev->dev, &mt_chg->wireless_desc,
+		&mt_chg->wireless_cfg);
+	if (IS_ERR(mt_chg->wireless_psy)) {
+		dev_notice(&pdev->dev, "Failed to register power supply: %ld\n",
+			PTR_ERR(mt_chg->wireless_psy));
+		ret = PTR_ERR(mt_chg->wireless_psy);
+		goto err_wireless_psy;
+	}
+#endif
 	cti = devm_kzalloc(&pdev->dev, sizeof(*cti), GFP_KERNEL);
 	if (!cti) {
 		ret = -ENOMEM;
@@ -873,6 +1001,11 @@ err_get_tcpc_dev:
 	devm_kfree(&pdev->dev, cti);
 err_no_mem:
 	power_supply_unregister(mt_chg->usb_psy);
+#ifdef CONFIG_WIRELESS_POWER_MT5728
+err_wireless_psy:
+	power_supply_unregister(mt_chg->wireless_psy);
+#endif
+	
 err_usb_psy:
 	power_supply_unregister(mt_chg->ac_psy);
 err_ac_psy:
@@ -888,7 +1021,10 @@ static int mt_charger_remove(struct platform_device *pdev)
 	power_supply_unregister(mt_charger->chg_psy);
 	power_supply_unregister(mt_charger->ac_psy);
 	power_supply_unregister(mt_charger->usb_psy);
-
+	
+	#ifdef CONFIG_WIRELESS_POWER_MT5728
+	power_supply_unregister(mt_charger->wireless_psy);
+	#endif
 	pr_info("%s\n", __func__);
 	if (cti->chgdet_task) {
 		kthread_stop(cti->chgdet_task);
@@ -919,7 +1055,9 @@ static int mt_charger_resume(struct device *dev)
 	power_supply_changed(mt_charger->chg_psy);
 	power_supply_changed(mt_charger->ac_psy);
 	power_supply_changed(mt_charger->usb_psy);
-
+	#ifdef CONFIG_WIRELESS_POWER_MT5728
+	power_supply_changed(mt_charger->wireless_psy);
+	#endif
 	return 0;
 }
 #endif
@@ -979,6 +1117,37 @@ enum charger_type mt_get_charger_type(void)
 	return mtk_chg->chg_type;
 }
 
+#ifdef CONFIG_WIRELESS_POWER_MT5728
+//up drv abb 0811 start 
+void wireless_chg_type_switch(bool otg_on)
+{
+	union power_supply_propval propval;
+	struct power_supply *psy = power_supply_get_by_name("charger");
+
+	if (!psy) {
+		pr_info("%s: get power supply failed\n", __func__);
+	}
+
+
+	pr_info("%s: start\n", __func__);
+	if (otg_on)
+	{
+		propval.intval = CHARGER_UNKNOWN;
+	}
+	else
+	{
+//		propval.intval = WIRELESS_CHARGER;
+		propval.intval = CHARGER_UNKNOWN;
+	}
+	
+	power_supply_set_property(psy, POWER_SUPPLY_PROP_CHARGE_TYPE, &propval);
+
+
+	pr_info("%s: propval.intval:%d\n", __func__,propval.intval);
+	pr_info("%s: end\n", __func__);
+}
+//up drv abb 0811 end
+#endif
 bool mt_charger_plugin(void)
 {
 	struct mt_charger *mtk_chg = NULL;

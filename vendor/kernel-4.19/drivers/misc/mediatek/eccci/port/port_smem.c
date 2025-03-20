@@ -61,15 +61,15 @@
 #define AP_META_PAGE_SIZE (63*1024)
 
 /*kernel 4.14 diff kernel 4.19
-kernel4.14中
+kernel4.14
 MT6765-----GEN93
 MT6833-----GEN97
 MT6853 (MT6877)------GEN97
 #define AP_META_PAGE_SIZE (65*1024)
 
-其他部分
+Others
 #define AP_META_PAGE_SIZE (63*1024)
-kernel4.19中
+kernel4.19
 #define AP_META_PAGE_SIZE (63*1024)
 */
 

@@ -35,6 +35,7 @@ enum {
 	DIRECT_CHARGER = 10,
 	MAIN_DIVIDER_CHARGER = 20,
 	SLAVE_DIVIDER_CHARGER = 21,
+	MAIN_HV_DIVIDER_CHARGER = 30,
 };
 
 struct charger_consumer {

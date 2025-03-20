@@ -1,6 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2015-2019 TrustKernel Incorporated
+ * All Rights Reserved.
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #include <linux/spinlock.h>
@@ -73,6 +83,7 @@ static int handle_nonpreempt_rpc(struct smc_param *p)
 {
 	uint32_t func_id = TEESMC_RETURN_GET_RPC_FUNC(p->a0);
 
+#if defined(CONFIG_TRUSTKERNEL_TEE_FP_SUPPORT)
 	/* for compatibility with legacy tee-os which
 	 * does not support clkmgr
 	 */
@@ -80,18 +91,20 @@ static int handle_nonpreempt_rpc(struct smc_param *p)
 		p->a1 = tee_clkmgr_handle(p->a1, p->a2);
 		return 0;
 	}
+#endif
 
-	if (func_id != T6SMC_RPC_NONPREEMPT_CMD)
+	if ((func_id & 0xff) != T6SMC_RPC_NONPREEMPT_CMD)
 		return 1;
 
 	switch (T6SMC_RPC_NONPREEMPT_GET_FUNC(p->a0)) {
+#if defined(CONFIG_TRUSTKERNEL_TEE_FP_SUPPORT)
 	case T6SMC_RPC_CLKMGR_CMD:
 		/* compatible with old interface */
 		p->a1 = tee_clkmgr_handle(p->a1,
 			(p->a1 & TEE_CLKMGR_TOKEN_NOT_LEGACY) ?
 				p->a2 : (p->a2 | TEE_CLKMGR_OP_ENABLE));
 		break;
-
+#endif
 	default:
 		pr_err("Unknown non-preempt rpc cmd: 0x%llx\n",
 			(unsigned long long) p->a0);

@@ -8,10 +8,10 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
-#include <mt-plat/charger_class.h>
-#include <mt-plat/mtk_charger.h>
-#include <mt-plat/mtk_battery.h>
-#include <mt-plat/prop_chgalgo_class.h>
+#include <mt-plat/v1/charger_class.h>
+#include <mt-plat/v1/mtk_charger.h>
+#include <mt-plat/v1/mtk_battery.h>
+#include <mt-plat/v1/prop_chgalgo_class.h>
 
 #define PCA_MTK_CHG_VERSION	"2.0.0_MTK"
 
@@ -21,6 +21,7 @@ enum mtk_chg_type {
 	MTK_CHGTYP_DVCHG,
 	MTK_CHGTYP_DVCHG_SLAVE,
 	MTK_CHGTYP_HV_DVCHG,
+	MTK_CHGTYP_HV_SLAVE_DVCHG,
 	MTK_CHGTYP_MAX,
 };
 
@@ -30,6 +31,7 @@ static const char *mtk_chgtyp_name[MTK_CHGTYP_MAX] = {
 	"primary_divider_chg",
 	"secondary_divider_chg",
 	"primary_hv_divider_chg",
+	"secondary_hv_divider_chg",
 };
 
 struct pca_mtk_chg_info {
@@ -236,7 +238,8 @@ static int pca_mtk_chg_get_adc(struct prop_chgalgo_device *pca,
 	ret = charger_dev_get_adc(info->chgdev[chgtyp], _chan, min, max);
 	if (ret == -ENOTSUPP) {
 		/* Temporary solution */
-		if (chgtyp == MTK_CHGTYP_HV_DVCHG) {
+		if ((chgtyp == MTK_CHGTYP_HV_DVCHG) ||
+				(chgtyp == MTK_CHGTYP_HV_SLAVE_DVCHG)) {
 			hv_dvchg = true;
 			ret = charger_dev_get_adc(
 				info->chgdev[MTK_CHGTYP_DVCHG], _chan, min,
@@ -383,6 +386,7 @@ static int pca_mtk_chg_set_auto_trans(struct prop_chgalgo_device *pca, u32 mV,
 {
 	struct pca_mtk_chg_info *info = prop_chgalgo_get_drvdata(pca);
 	int chgtyp = get_mtk_chgtyp(pca);
+	dev_info(info->dev, "%s chgtyp = %d.  \n", __func__, chgtyp);
 
 	if (chgtyp < 0)
 		return -EINVAL;
@@ -420,6 +424,7 @@ static SIMPLE_PCA_CHG_DESC(pca_chg_loadsw, pca_chg_ops);
 static SIMPLE_PCA_CHG_DESC(pca_chg_dvchg, pca_chg_ops);
 static SIMPLE_PCA_CHG_DESC(pca_chg_dvchg_slave, pca_chg_ops);
 static SIMPLE_PCA_CHG_DESC(pca_chg_hv_dvchg, pca_chg_ops);
+static SIMPLE_PCA_CHG_DESC(pca_chg_hv_dvchg_slave, pca_chg_ops);
 
 static const struct prop_chgalgo_desc *pca_mtk_chg_desc_tbl[MTK_CHGTYP_MAX] = {
 	&pca_chg_swchg_desc,
@@ -427,6 +432,7 @@ static const struct prop_chgalgo_desc *pca_mtk_chg_desc_tbl[MTK_CHGTYP_MAX] = {
 	&pca_chg_dvchg_desc,
 	&pca_chg_dvchg_slave_desc,
 	&pca_chg_hv_dvchg_desc,
+	&pca_chg_hv_dvchg_slave_desc,
 };
 
 static int pca_mtk_chg_register(struct pca_mtk_chg_info *info)

@@ -1,6 +1,16 @@
 /* SPDX-License-Identifier: GPL-2.0
  *
  * Copyright (c) 2015-2019 TrustKernel Incorporated
+ * All Rights Reserved.
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #ifndef TEE_CLKMGR_H
@@ -42,9 +52,16 @@ int tee_clkmgr_register(const char *clkname, int master_id,
 
 #define TEE_CLKMGR_TOKEN_NOT_LEGACY	(0x1)
 
+#define TEE_CLKMGR_TOKEN_ID_MASK    (0x7fffu)
 #define TEE_CLKMGR_TOKEN_ID_SHIFT	(1)
+#define TEE_CLKMGR_TOKEN_ID(token)  \
+    (((token) >> TEE_CLKMGR_TOKEN_ID_SHIFT) & TEE_CLKMGR_TOKEN_ID_MASK)
+
 #define TEE_CLKMGR_TOKEN_TYPE_MASK	(0xffffu)
 #define TEE_CLKMGR_TOKEN_TYPE_SHIFT	(16)
+#define TEE_CLKMGR_TOKEN_TYPE(token)  \
+    (((token) >> TEE_CLKMGR_TOKEN_TYPE_SHIFT) & TEE_CLKMGR_TOKEN_TYPE_MASK)
+
 #define TEE_CLKMGR_TOKEN(type, id)	\
 	(((type) << TEE_CLKMGR_TOKEN_TYPE_SHIFT) | \
 	((id) << TEE_CLKMGR_TOKEN_ID_SHIFT) | \

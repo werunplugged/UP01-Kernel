@@ -58,7 +58,9 @@
 #include "mtk_charger_intf.h"
 #include "mtk_switch_charging.h"
 #include "mtk_intf.h"
-
+#ifdef CONFIG_RT_HVDV2_SUPPORT
+#include "rt_hvdv2_intf.h"
+#endif
 struct tag_bootmode {
 	u32 size;
 	u32 tag;
@@ -89,6 +91,13 @@ static void _disable_all_charging(struct charger_manager *info)
 		if (mtk_pe_get_is_connect(info))
 			mtk_pe_reset_ta_vchr(info);
 	}
+
+#ifdef CONFIG_RT_HVDV2_SUPPORT
+	if (rt_hvdv2_get_is_enable(info)) {
+		if (rt_hvdv2_get_is_connect(info))
+			rt_hvdv2_stop_algo(info, true);
+	}
+#endif
 
 	if (info->enable_pe_5)
 		pe50_stop();
@@ -126,9 +135,22 @@ static void swchg_select_charging_current_limit(struct charger_manager *info)
 				boot_mode = tag->bootmode;
 		}
 	}
+	pdata = &info->chg1_data;
 
+#ifdef CONFIG_RT_HVDV2_SUPPORT
+	if (info->hvdv2.online) {
+		chr_err("In HVDV2\n");
+		return;
+	}
+#endif
 	if (info->pe5.online) {
 		chr_err("In PE5.0\n");
+chr_err("[charger]%s-%d: input_current_limit=%d, charging_current_limit=%d\n",__func__, __LINE__, info->chg1_data.input_current_limit, info->chg1_data.charging_current_limit);
+		pdata->input_current_limit = info->data.ac_charger_input_current;
+		pdata->charging_current_limit = info->data.ac_charger_current;
+		charger_dev_set_input_current(info->chg1_dev, pdata->input_current_limit);
+		charger_dev_set_charging_current(info->chg1_dev, pdata->charging_current_limit);
+chr_err("[charger]%s-%d: input_current_limit=%d, charging_current_limit=%d\n",__func__, __LINE__, info->chg1_data.input_current_limit, info->chg1_data.charging_current_limit);
 		return;
 	}
 
@@ -192,6 +214,10 @@ static void swchg_select_charging_current_limit(struct charger_manager *info)
 		pdata->input_current_limit = 100000; /* 100mA */
 		goto done;
 	}
+
+	#ifdef CONFIG_WIRELESS_POWER_MT5728
+	printk(KERN_ALERT "[%s] mt5728 info->chr_type:%d \n", __func__,info->chr_type );
+	#endif
 
 	if (is_typec_adapter(info)) {
 		if (adapter_dev_get_property(info->pd_adapter, TYPEC_RP_LEVEL)
@@ -269,6 +295,15 @@ static void swchg_select_charging_current_limit(struct charger_manager *info)
 				info->data.apple_2_1a_charger_current;
 	}
 
+#ifdef CONFIG_WIRELESS_POWER_MT5728
+	else if (info->chr_type == WIRELESS_CHARGER){
+		pdata->input_current_limit = info->data.ech_wls_charger_input_current;
+		pdata->charging_current_limit = info->data.ech_wls_charger_current;
+		chr_err("wireless charger current: %d, input current: %d.\n", pdata->charging_current_limit, pdata->input_current_limit);
+	}
+#endif
+
+
 	if (info->enable_sw_jeita) {
 		if (IS_ENABLED(CONFIG_USBIF_COMPLIANCE)
 		    && info->chr_type == STANDARD_HOST)
@@ -289,10 +324,17 @@ static void swchg_select_charging_current_limit(struct charger_manager *info)
 			pdata->input_current_limit =
 					pdata->thermal_input_current_limit;
 	}
-
+#ifdef CONFIG_WIRELESS_POWER_MT5728
+	if (pdata->input_current_limit_by_aicl != -1 &&
+	    !mtk_pe20_get_is_connect(info) && !mtk_pe_get_is_connect(info) &&
+	    !mtk_is_TA_support_pd_pps(info)
+		&&( info->chr_type != WIRELESS_CHARGER) 	
+	    ) {
+#else
 	if (pdata->input_current_limit_by_aicl != -1 &&
 	    !mtk_pe20_get_is_connect(info) && !mtk_pe_get_is_connect(info) &&
 	    !mtk_is_TA_support_pd_pps(info)) {
+#endif
 		if (pdata->input_current_limit_by_aicl <
 		    pdata->input_current_limit)
 			pdata->input_current_limit =
@@ -307,7 +349,7 @@ done:
 	if (ret != -ENOTSUPP && pdata->input_current_limit < aicr1_min)
 		pdata->input_current_limit = 0;
 
-	chr_err("force:%d thermal:%d,%d pe4:%d,%d,%d setting:%d %d sc:%d,%d,%d type:%d usb_unlimited:%d usbif:%d usbsm:%d aicl:%d atm:%d\n",
+	chr_err("force(mtk_switch_charging2.c):%d thermal:%d,%d pe4:%d,%d,%d setting:%d %d sc:%d,%d,%d type:%d usb_unlimited:%d usbif:%d usbsm:%d aicl:%d atm:%d\n",
 		_uA_to_mA(pdata->force_charging_current),
 		_uA_to_mA(pdata->thermal_input_current_limit),
 		_uA_to_mA(pdata->thermal_charging_current_limit),
@@ -445,14 +487,19 @@ static int mtk_switch_charging_plug_out(struct charger_manager *info)
 	mtk_pe20_set_is_cable_out_occur(info, true);
 	mtk_pe_set_is_cable_out_occur(info, true);
 	mtk_pdc_plugout(info);
+#ifdef CONFIG_RT_HVDV2_SUPPORT    
 
-	if (info->enable_pe_5)
+	if (info->enable_hvdv2)
+		rt_hvdv2_plugout_reset(info);
+#endif
+
+	if (info->enable_pe_5){
 		pe50_stop();
-
+		mtk_pe50_plugout_reset(info);
+	}
 	if (info->enable_pe_4)
 		pe40_stop();
 
-	info->leave_pe5 = false;
 	info->leave_pe4 = false;
 	info->leave_pdc = false;
 
@@ -468,6 +515,9 @@ static int mtk_switch_charging_do_charging(struct charger_manager *info,
 	if (en) {
 		swchgalg->disable_charging = false;
 		swchgalg->state = CHR_CC;
+#ifdef CONFIG_RT_HVDV2_SUPPORT    
+		rt_hvdv2_set_is_enable(info, en);
+#endif
 		get_monotonic_boottime(&swchgalg->charging_begin_time);
 		charger_manager_notifier(info, CHARGER_NOTIFY_NORMAL);
 	} else {
@@ -492,8 +542,6 @@ static int mtk_switch_chr_pe50_init(struct charger_manager *info)
 	else
 		chr_err("pe50 init fail\n");
 
-	info->leave_pe5 = false;
-
 	return ret;
 }
 
@@ -516,8 +564,7 @@ static int mtk_switch_chr_pe50_run(struct charger_manager *info)
 
 	if (ret == 2) {
 		chr_err("leave pe5\n");
-		info->leave_pe5 = true;
-		swchgalg->state = CHR_CC;
+		goto stop;
 	}
 
 	return 0;
@@ -530,6 +577,68 @@ retry:
 	return 0;
 }
 
+static int mtk_switch_chr_hvdv2_init(struct charger_manager *info)
+{
+	int ret = -1;
+
+#ifdef CONFIG_RT_HVDV2_SUPPORT
+	ret = rt_hvdv2_init(info);
+#endif
+
+	if (ret == 0)
+		set_charger_manager(info);
+	else
+		chr_err("hvdv2 init fail\n");
+
+	return ret;
+}
+
+static int mtk_switch_chr_hvdv2_ready(struct charger_manager *info)
+{
+	int ret = -1;
+	struct switch_charging_alg_data *swchgalg = info->algorithm_data;
+
+#ifdef CONFIG_RT_HVDV2_SUPPORT
+	ret = rt_hvdv2_start(info);
+#endif
+
+	if (ret < 0) {
+    #ifdef CONFIG_RT_HVDV2_SUPPORT
+		info->hvdv2.online = false;
+    #endif
+		swchgalg->state = CHR_CC;
+	} else
+		swchgalg->state = CHR_HVDV2_RUNNING;
+	return 0;
+}
+
+#ifdef CONFIG_RT_HVDV2_SUPPORT
+static int mtk_switch_chr_hvdv2_running(struct charger_manager *info)
+{
+	struct switch_charging_alg_data *swchgalg = info->algorithm_data;
+	struct charger_data *dvchg_data = &info->hv_dvchg1_data;
+
+	if (!rt_hvdv2_is_running(info) || !info->enable_hv_charging)
+		goto stop;
+	if (!info->enable_hv_charging) {
+		rt_hvdv2_stop_algo(info, true);
+		goto stop;
+	}
+
+	rt_hvdv2_thermal_throttling(info,
+				    dvchg_data->thermal_input_current_limit);
+	if (info->enable_sw_jeita)
+		rt_hvdv2_set_jeita_vbat_cv(info, info->sw_jeita.cv);
+	return 0;
+
+stop:
+	chr_info("%s HVDV2 stops\n", __func__);
+	rt_hvdv2_stop_algo(info, true);
+	info->hvdv2.online = false;
+	swchgalg->state = CHR_CC;
+	return -EINVAL;
+}
+#endif
 
 static int mtk_switch_chr_pe40_init(struct charger_manager *info)
 {
@@ -821,22 +930,25 @@ static int mtk_switch_chr_cc(struct charger_manager *info)
 		info->data.high_temp_to_enter_pe40,
 		info->data.low_temp_to_enter_pe40);
 
-	if (info->enable_pe_5 && pe50_is_ready() && !info->leave_pe5) {
+#ifdef CONFIG_RT_HVDV2_SUPPORT
+	if (rt_hvdv2_is_ready(info)) {
+		if (info->enable_hv_charging == true) {
+			chr_err("enter HVDV2\n");
+			swchgalg->state = CHR_HVDV2_READY;
+			info->hvdv2.online = true;
+			return 1;
+		}
+	}
+    else{
+        chr_err("enter HVDV2. error. \n");
+    }
+#endif
+
+	if (info->enable_pe_5 && pe50_is_ready()) { 
 		if (info->enable_hv_charging == true) {
 			chr_err("enter PE5.0\n");
 			swchgalg->state = CHR_PE50;
 			info->pe5.online = true;
-			if (mtk_pe20_get_is_enable(info)) {
-				mtk_pe20_set_is_enable(info, false);
-				if (mtk_pe20_get_is_connect(info))
-					mtk_pe20_reset_ta_vchr(info);
-			}
-
-			if (mtk_pe_get_is_enable(info)) {
-				mtk_pe_set_is_enable(info, false);
-				if (mtk_pe_get_is_connect(info))
-					mtk_pe_reset_ta_vchr(info);
-			}
 			return 1;
 		}
 	}
@@ -957,6 +1069,9 @@ static int mtk_switch_chr_full(struct charger_manager *info)
 		charger_dev_do_event(info->chg1_dev, EVENT_RECHARGE, 0);
 		mtk_pe20_set_to_check_chr_type(info, true);
 		mtk_pe_set_to_check_chr_type(info, true);
+    #ifdef CONFIG_RT_HVDV2_SUPPORT
+		rt_hvdv2_set_is_enable(info, true);
+    #endif
 		info->enable_dynamic_cv = true;
 		get_monotonic_boottime(&swchgalg->charging_begin_time);
 		chr_err("battery recharging!\n");
@@ -981,8 +1096,16 @@ static int mtk_switch_charging_run(struct charger_manager *info)
 		info->pd_type,
 		swchgalg->total_charging_time);
 
+#ifdef CONFIG_RT_HVDV2_SUPPORT
 	if (mtk_pdc_check_charger(info) == false &&
-	    mtk_is_TA_support_pd_pps(info) == false) {
+	    mtk_is_TA_support_pd_pps(info) == false &&
+	    !info->pe5.online && !info->hvdv2.online)
+#else
+    if (mtk_pdc_check_charger(info) == false &&
+        mtk_is_TA_support_pd_pps(info) == false &&
+        !info->pe5.online)
+#endif
+	{
 		mtk_pe20_check_charger(info);
 		if (mtk_pe20_get_is_connect(info) == false)
 			mtk_pe_check_charger(info);
@@ -999,6 +1122,15 @@ static int mtk_switch_charging_run(struct charger_manager *info)
 		case CHR_PE50:
 			ret = mtk_switch_chr_pe50_run(info);
 			break;
+
+		case CHR_HVDV2_READY:
+			ret = mtk_switch_chr_hvdv2_ready(info);
+			break;
+    #ifdef CONFIG_RT_HVDV2_SUPPORT            
+		case CHR_HVDV2_RUNNING:
+			ret = mtk_switch_chr_hvdv2_running(info);
+			break;
+    #endif
 
 		case CHR_PE40:
 			ret = mtk_switch_chr_pe40_run(info);
@@ -1068,10 +1200,20 @@ static int dvchg1_dev_event(struct notifier_block *nb, unsigned long event,
 {
 	struct charger_manager *info =
 			container_of(nb, struct charger_manager, dvchg1_nb);
+	struct switch_charging_alg_data *swchgalg = info->algorithm_data;
 
 	chr_info("%s %ld", __func__, event);
 
-	return mtk_pe50_notifier_call(info, MTK_PE50_NOTISRC_CHG, event, data);
+	if (swchgalg->state == CHR_PE50)
+		return mtk_pe50_notifier_call(info, MTK_PE50_NOTISRC_CHG, event,
+						data);
+#ifdef CONFIG_RT_HVDV2_SUPPORT
+	else if (swchgalg->state == CHR_HVDV2_READY ||
+		 swchgalg->state == CHR_HVDV2_RUNNING)
+		return rt_hvdv2_notifier_call(info, RT_HVDV2_NOTISRC_CHG, event,
+						data);
+#endif    
+	return 0;
 }
 
 static int dvchg2_dev_event(struct notifier_block *nb, unsigned long event,
@@ -1079,10 +1221,38 @@ static int dvchg2_dev_event(struct notifier_block *nb, unsigned long event,
 {
 	struct charger_manager *info =
 			container_of(nb, struct charger_manager, dvchg2_nb);
+	struct switch_charging_alg_data *swchgalg = info->algorithm_data;
 
 	chr_info("%s %ld", __func__, event);
 
-	return mtk_pe50_notifier_call(info, MTK_PE50_NOTISRC_CHG, event, data);
+	if (swchgalg->state == CHR_PE50)
+		return mtk_pe50_notifier_call(info, MTK_PE50_NOTISRC_CHG, event,
+						data);
+#ifdef CONFIG_RT_HVDV2_SUPPORT
+	else if (swchgalg->state == CHR_HVDV2_READY ||
+		 swchgalg->state == CHR_HVDV2_RUNNING)
+		return rt_hvdv2_notifier_call(info, RT_HVDV2_NOTISRC_CHG, event,
+					      data);
+#endif
+	return 0;
+}
+
+static int hv_dvchg1_dev_event(struct notifier_block *nb, unsigned long event,
+			       void *data)
+{
+#ifdef CONFIG_RT_HVDV2_SUPPORT
+	struct charger_manager *info =
+		container_of(nb, struct charger_manager, hv_dvchg1_nb);
+	struct switch_charging_alg_data *swchgalg = info->algorithm_data;
+
+	chr_info("%s %ld", __func__, event);
+
+	if (swchgalg->state == CHR_HVDV2_READY ||
+	    swchgalg->state == CHR_HVDV2_RUNNING)
+		return rt_hvdv2_notifier_call(info, RT_HVDV2_NOTISRC_CHG,
+					      event, data);
+#endif    
+	return 0;
 }
 
 int mtk_switch_charging_init2(struct charger_manager *info)
@@ -1120,6 +1290,16 @@ int mtk_switch_charging_init2(struct charger_manager *info)
 	} else
 		chr_err("Can't find secondary divider charger\n");
 
+	info->hv_dvchg1_dev = get_charger_by_name("primary_hv_divider_chg");
+	if (info->hv_dvchg1_dev) {
+		chr_err("Found primary hv divider charger [%s]\n",
+			info->hv_dvchg1_dev->props.alias_name);
+		info->hv_dvchg1_nb.notifier_call = hv_dvchg1_dev_event;
+		register_charger_device_notifier(info->hv_dvchg1_dev,
+						 &info->hv_dvchg1_nb);
+	} else
+		chr_err("Can't find primary hv divider charger ***\n");
+
 	mutex_init(&swch_alg->ichg_aicr_access_mutex);
 
 	info->algorithm_data = swch_alg;
@@ -1130,6 +1310,7 @@ int mtk_switch_charging_init2(struct charger_manager *info)
 	info->do_event = charger_dev_event;
 	info->change_current_setting = mtk_switch_charging_current;
 
+	mtk_switch_chr_hvdv2_init(info);
 	mtk_switch_chr_pe50_init(info);
 	mtk_switch_chr_pe40_init(info);
 	mtk_switch_chr_pdc_init(info);

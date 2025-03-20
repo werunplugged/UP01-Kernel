@@ -1,0 +1,9 @@
+config WIRELESS_POWER_MT5728
+	bool "mt5728 programable power supply class for wireless"
+	depends on POWER_SUPPLY
+	default n
+	help
+	  Say Y to enable
+	  mt5728 programable power supply class for wireless
+	  Say N to disable
+	  mt5728 programable power supply class for wireless

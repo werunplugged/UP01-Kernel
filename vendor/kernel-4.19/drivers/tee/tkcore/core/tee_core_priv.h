@@ -1,6 +1,16 @@
 /* SPDX-License-Identifier: GPL-2.0
  *
  * Copyright (c) 2015-2019 TrustKernel Incorporated
+ * All Rights Reserved.
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #ifndef __TEE_CORE_PRIV_H__
@@ -45,6 +55,10 @@ int tee_session_invoke_be(struct tee_session *sess, struct tee_cmd_io *cmd_io);
 int tee_core_alloc_uuid(void *ptr);
 void tee_core_free_uuid(int id);
 void *tee_core_uuid2ptr(int id);
+
+#ifdef CONFIG_TRUSTKERNEL_TEE_FP_SUPPORT
+void tee_clkmgr_exit(void);
+#endif
 
 #ifdef CONFIG_COMPAT
 

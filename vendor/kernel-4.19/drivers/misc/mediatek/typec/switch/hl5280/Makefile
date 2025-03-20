@@ -1,0 +1,1 @@
+obj-$(CONFIG_USBSWITCH_HL5280) += hl5280-i2c.o 

@@ -21,8 +21,8 @@
 		/* the number of notifier supply */
 		mt-tcpc,notifier_supply_num = <2>;
 #endif
-		mt6360pd,intr_gpio = <&pio 24 0x0>;
-		mt6360pd,intr_gpio_num = <24>;
+		mt6360pd,intr_gpio = <&pio 7 0x0>;
+		mt6360pd,intr_gpio_num = <7>;
 		mt6360pd,pcb_gpio = <&pio 5 0x0>;
 		mt6360pd,pcb_gpio_num = <5>;
 /* 0: gpio low as phone, 1: gpio high as phone */

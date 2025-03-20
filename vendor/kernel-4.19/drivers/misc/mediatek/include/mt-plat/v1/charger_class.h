@@ -113,6 +113,17 @@ struct charger_ops {
 	int (*kick_direct_charging_wdt)(struct charger_device *dev);
 	int (*set_direct_charging_ibusoc)(struct charger_device *dev, u32 uA);
 	int (*set_direct_charging_vbusov)(struct charger_device *dev, u32 uV);
+	int (*set_direct_charging_ibatoc)(struct charger_device *dev, u32 uA);
+	int (*set_direct_charging_vbatov)(struct charger_device *dev, u32 uV);
+	int (*set_direct_charging_vbatov_alarm)(struct charger_device *dev,
+						u32 uV);
+	int (*reset_direct_charging_vbatov_alarm)(struct charger_device *dev);
+	int (*set_direct_charging_vbusov_alarm)(struct charger_device *dev,
+						u32 uV);
+	int (*reset_direct_charging_vbusov_alarm)(struct charger_device *dev);
+	int (*is_direct_charging_vbuslowerr)(struct charger_device *dev,
+					     bool *err);
+	int (*init_direct_charging_chip)(struct charger_device *dev);
 
 	int (*set_ibusocp)(struct charger_device *dev, u32 uA);
 	int (*set_vbusovp)(struct charger_device *dev, u32 uV);
@@ -311,6 +322,22 @@ extern int charger_dev_set_direct_charging_ibusoc(
 	struct charger_device *charger_dev, u32 ua);
 extern int charger_dev_set_direct_charging_vbusov(
 	struct charger_device *charger_dev, u32 uv);
+extern int charger_dev_set_direct_charging_ibatoc(
+	struct charger_device *charger_dev, u32 ua);
+extern int charger_dev_set_direct_charging_vbatov(
+	struct charger_device *charger_dev, u32 uv);
+extern int charger_dev_set_direct_charging_vbatov_alarm(
+	struct charger_device *charger_dev, u32 uv);
+extern int charger_dev_reset_direct_charging_vbatov_alarm(
+	struct charger_device *charger_dev);
+extern int charger_dev_set_direct_charging_vbusov_alarm(
+	struct charger_device *charger_dev, u32 uv);
+extern int charger_dev_reset_direct_charging_vbusov_alarm(
+	struct charger_device *charger_dev);
+extern int charger_dev_is_direct_charging_vbuslowerr(
+	struct charger_device *charger_dev, bool *err);
+extern int charger_dev_init_direct_charging_chip(
+	struct charger_device *charger_dev);
 
 extern int charger_dev_set_ibusocp(struct charger_device *chg_dev, u32 uA);
 extern int charger_dev_set_vbusovp(struct charger_device *chg_dev, u32 uV);

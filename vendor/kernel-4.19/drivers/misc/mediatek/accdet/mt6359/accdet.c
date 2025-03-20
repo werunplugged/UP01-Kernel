@@ -5,9 +5,7 @@
 
 #include "accdet.h"
 #if PMIC_ACCDET_KERNEL
-#ifdef CONFIG_ACCDET_EINT
 #include <linux/of_gpio.h>
-#endif
 #include <linux/timer.h>
 #include <linux/of.h>
 #include <linux/of_irq.h>
@@ -40,7 +38,10 @@
 #endif
 #include "pmic_auxadc.h"
 #endif /* end of #if PMIC_ACCDET_KERNEL */
-
+#include <linux/cust_include/cust_project_all_config.h>
+#ifdef __GFTK_TCPC_ACCDECT_SUPPORT__
+#include <../../typec/tcpc/inc/tcpm.h>
+#endif
 /********************grobal variable definitions******************/
 #if PMIC_ACCDET_CTP
 #define CONFIG_ACCDET_EINT_IRQ
@@ -81,6 +82,16 @@ enum pmic_eint_ID {
 	PMIC_EINT1 = 2,
 	PMIC_BIEINT = 3,
 };
+#endif
+
+#ifdef __GFTK_TCPC_ACCDECT_SUPPORT__
+struct tcpc_device *typec_dev;
+struct notifier_block typec_nb;	
+int typec_recheck_flag=1;
+int accdet_typec_state = EINT_PIN_PLUG_OUT;
+#if defined(CONFIG_MTK_USB_TYPEC_U3_MUX) ||defined(CONFIG_USBSWITCH_HL5280) 
+extern void usb3_switch_set(int orientation);
+#endif
 #endif
 
 /* accdet_status_str: to record current 'accdet_status' by string,
@@ -160,19 +171,19 @@ static struct wakeup_source *accdet_timer_lock;
 static DEFINE_MUTEX(accdet_eint_irq_sync_mutex);
 #endif /* end of #if PMIC_ACCDET_KERNEL */
 /* accdet customized info by dts*/
-static struct head_dts_data accdet_dts;
+/*static*/ struct head_dts_data accdet_dts;
 struct pwm_deb_settings *cust_pwm_deb;
 
 #ifdef CONFIG_ACCDET_EINT
 static struct pinctrl *accdet_pinctrl;
 static struct pinctrl_state *pins_eint;
 static u32 gpiopin, gpio_headset_deb;
-static u32 accdet_irq;
+u32 accdet_irq;
 #endif
 
 /* accdet FSM State & lock*/
 static bool eint_accdet_sync_flag;
-static u32 cur_eint_state = EINT_PIN_PLUG_OUT;
+u32 cur_eint_state = EINT_PIN_PLUG_OUT;
 #ifdef CONFIG_ACCDET_SUPPORT_BI_EINT
 static u32 cur_eint0_state = EINT_PIN_PLUG_OUT;
 static u32 cur_eint1_state = EINT_PIN_PLUG_OUT;
@@ -1887,6 +1898,7 @@ static void eint_work_callback(void)
 
 		/* disable accdet_sw_en=0
 		 */
+ 
 		pmic_write_clr(PMIC_ACCDET_SW_EN_ADDR,
 			PMIC_ACCDET_SW_EN_SHIFT);
 		disable_accdet();
@@ -2128,6 +2140,21 @@ static void accdet_work_callback(void)
 
 	mutex_lock(&accdet_eint_irq_sync_mutex);
 	if (eint_accdet_sync_flag) {
+           #ifdef  __GFTK_TCPC_ACCDECT_SUPPORT__
+               if(cable_type==HEADSET_NO_MIC && typec_recheck_flag==1)
+               {  // in this case we need reset accdet and recheckit
+                               mutex_unlock(&accdet_eint_irq_sync_mutex);
+                               __pm_relax(accdet_irq_lock);
+                               typec_recheck_flag =0;
+							   #if defined(CONFIG_MTK_USB_TYPEC_U3_MUX) ||defined(CONFIG_USBSWITCH_HL5280) 
+							   usb3_switch_set(2);
+							   #endif
+                               disable_accdet();
+                               accdet_init();  /* do set pwm_idle on in accdet_init*/
+                               enable_accdet(0);
+               }
+               #endif
+
 		if (pre_cable_type != cable_type)
 			send_accdet_status_event(cable_type, 1);
 	} else
@@ -2162,7 +2189,7 @@ static void accdet_queue_work(void)
 }
 
 #ifdef CONFIG_ACCDET_EINT_IRQ
-static int pmic_eint_queue_work(int eintID)
+int pmic_eint_queue_work(int eintID)
 {
 	int ret = 0;
 
@@ -2417,6 +2444,9 @@ void accdet_irq_handle(void)
 		gmoistureID = pmic_read_mbit(PMIC_ACCDET_EINT0_MEM_IN_ADDR,
 			PMIC_ACCDET_EINT0_MEM_IN_SHIFT,
 			PMIC_ACCDET_EINT0_MEM_IN_MASK);
+#ifdef __GFTK_TCPC_ACCDECT_SUPPORT__
+               gmoistureID = 0;
+#endif
 #ifdef CONFIG_ACCDET_EINT_IRQ
 		if (get_moisture_det_en() == 0x1) {
 			/* adjust moisture digital/analog setting */
@@ -2460,7 +2490,7 @@ static void accdet_eint_handler(void)
 #endif
 
 #ifdef CONFIG_ACCDET_EINT
-static irqreturn_t ex_eint_handler(int irq, void *data)
+irqreturn_t ex_eint_handler(int irq, void *data)
 {
 	int ret = 0;
 
@@ -2557,6 +2587,8 @@ static inline int ext_eint_setup(struct platform_device *platform_device)
 	accdet_eint_type = ints[1];
 	pr_info("accdet set gpio EINT, gpiopin=%d, accdet_eint_type=%d\n",
 			gpiopin, accdet_eint_type);
+#ifdef __GFTK_TCPC_ACCDECT_SUPPORT__
+#else 
 	ret = request_irq(accdet_irq, ex_eint_handler, IRQF_TRIGGER_NONE,
 		"accdet-eint", NULL);
 	if (ret) {
@@ -2564,7 +2596,7 @@ static inline int ext_eint_setup(struct platform_device *platform_device)
 			ret);
 		return ret;
 	}
-
+#endif
 	pr_info("accdet set gpio EINT finished, irq=%d, gpio_headset_deb=%d\n",
 			accdet_irq, gpio_headset_deb);
 
@@ -3295,6 +3327,74 @@ static void accdet_modify_vref_volt_self(void)
 			pmic_read(PMIC_RG_EINTCOMPVTH_ADDR));
 	}
 }
+
+#ifdef __GFTK_TCPC_ACCDECT_SUPPORT__ 
+static int accdet_typec_callback(struct notifier_block *pnb,
+				unsigned long event, void *data)
+{
+	struct tcp_notify *noti = data;
+	uint8_t old_state = TYPEC_UNATTACHED, new_state = TYPEC_UNATTACHED;
+
+
+
+	switch (event) {
+	case TCP_NOTIFY_TYPEC_STATE:
+		old_state = noti->typec_state.old_state;
+		new_state = noti->typec_state.new_state;
+		if (old_state == TYPEC_UNATTACHED &&
+			   new_state == TYPEC_ATTACHED_AUDIO) {
+			typec_recheck_flag =1;
+			pmic_eint_queue_work(1);
+			accdet_typec_state = EINT_PIN_PLUG_IN;
+			pr_info("%s Audio plug in111\n", __func__);
+		} else if (old_state == TYPEC_ATTACHED_AUDIO &&
+			   new_state == TYPEC_UNATTACHED) {
+			typec_recheck_flag = 0;
+			pmic_eint_queue_work(1);
+			accdet_typec_state = EINT_PIN_PLUG_OUT;
+#if defined(CONFIG_MTK_USB_TYPEC_U3_MUX) ||defined(CONFIG_USBSWITCH_HL5280) 
+		    usb3_switch_set(0);
+#endif		
+			pr_info("%s Audio plug out111\n", __func__);
+		}
+		break;
+	}
+	return NOTIFY_OK;
+}
+
+static int __maybe_unused accdet_typec_init(void)
+{
+        int ret;
+
+        typec_dev = tcpc_dev_get_by_name("type_c_port0");
+
+        if (!typec_dev) {
+                pr_info("Failed to get tcpc device for accdet.\n");
+
+                return -EPROBE_DEFER;
+        }
+
+        typec_nb.notifier_call = accdet_typec_callback;
+        ret = register_tcp_dev_notifier(typec_dev, &typec_nb, TCP_NOTIFY_TYPE_ALL);
+        if (ret < 0) {
+                pr_info("Failed to register typec notifer for accdet.\n");
+
+                return ret;
+        }
+        pr_info("%s() success.\n",__func__);
+        return 0;
+}
+
+static void __maybe_unused accdet_typec_destroy(void)
+{
+        if (typec_dev) {
+                unregister_tcp_dev_notifier(typec_dev, &typec_nb, TCP_NOTIFY_TYPE_USB);
+                typec_dev = NULL;
+        }
+}
+#endif
+
+
 #if PMIC_ACCDET_KERNEL
 EXPORT_SYMBOL(accdet_late_init);
 
@@ -3311,7 +3411,13 @@ static void delay_init_timerhandler(struct timer_list *t)
 		} else
 			pr_info("%s inited dts fail\n", __func__);
 	}
+
 }
+
+
+
+
+
 
 int mt_accdet_probe(struct platform_device *dev)
 {
@@ -3492,6 +3598,9 @@ int mt_accdet_probe(struct platform_device *dev)
 	pmic_enable_interrupt(INT_ACCDET_EINT1, 1, "ACCDET_EINT1");
 #endif
 #endif
+#ifdef __GFTK_TCPC_ACCDECT_SUPPORT__
+	accdet_typec_init();
+#endif
 	pr_info("%s done!\n", __func__);
 	return 0;
 
@@ -3524,7 +3633,9 @@ err_chrdevregion:
 void mt_accdet_remove(void)
 {
 	pr_debug("%s enter!\n", __func__);
-
+#ifdef __GFTK_TCPC_ACCDECT_SUPPORT__
+	accdet_typec_destroy();
+#endif
 	/* cancel_delayed_work(&accdet_work); */
 	destroy_workqueue(eint_workqueue);
 	destroy_workqueue(dis_micbias_workqueue);

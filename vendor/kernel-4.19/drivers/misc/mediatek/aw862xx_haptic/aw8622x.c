@@ -962,29 +962,29 @@ static int aw8622x_haptic_ram_config(struct aw8622x *aw8622x, int duration)
 	}
 #endif
 	if (duration ==200) {
-		duration ==100; /*错误face unlock*/
+		duration ==100; /*wrong face unlock*/
 	}
 
 	if (duration ==12) {
-		duration ==0; /*来电铃声*/
+		duration ==0; /*ring tone*/
 	}
 
 	if (duration ==65 || duration ==95) {
-		wavseq = 1;	/*1-短-强*/
+		wavseq = 1;	/*1-short-strong*/
 		wavloop = 0;
 	} else if ((duration > 0) && (duration < aw8622x->dts_info.duration_time[0]) && duration !=12) {
-		wavseq = 3;	/*0-30, 3-短-弱*/
+		wavseq = 3;	/*0-30, 3-short-weak*/
 		wavloop = 0;
 	} else if ((duration >= aw8622x->dts_info.duration_time[0]) &&
 		(duration < aw8622x->dts_info.duration_time[1])) {
-		wavseq = 1;	/*30-60, 1-短-强*/
+		wavseq = 1;	/*30-60, 1-short-strong*/
 		wavloop = 0;
 	} else if ((duration >= aw8622x->dts_info.duration_time[1]) &&
 		(duration < aw8622x->dts_info.duration_time[2]) && duration !=65) {
-		wavseq = 5;	/*60-90, 5-长-弱*/
+		wavseq = 5;	/*60-90, 5-long-weak*/
 		wavloop = 15;   /*long vibration*/
 	} else if(duration >= aw8622x->dts_info.duration_time[2] && duration !=95) {
-		wavseq = 4;	/*90-, 4-长-强*/
+		wavseq = 4;	/*90-, 4-long-strong*/
 		wavloop = 15;	/*long vibration*/
 	} else {
 		wavseq = 0;
@@ -4778,7 +4778,7 @@ static void aw8622x_rtp_work_tiktap(struct work_struct *work)
 		}
 	}
 	if (count <= 0) {
-		aw_dev_err(aw8622x->dev, "%s error, start_buf->status != VALID 锛乗n", __func__);
+		aw_dev_err(aw8622x->dev, "%s error, start_buf->status != VALID \n", __func__);
 		aw8622x->tiktap_stop_flag = true;
 		mutex_unlock(&aw8622x->lock);
 		return;
