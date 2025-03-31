@@ -27,7 +27,7 @@ This repository serves as the central hub for the open-source development and ma
 
 
 ```bash
-git clone https://github.com/unplugged-tech/up01-kernel.git
+git clone https://github.com/werunplugged/UP01-Kernel
 cd up01-kernel
 ```
 ### Building the Kernel
