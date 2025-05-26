@@ -15,13 +15,15 @@ subdir-ccflags-y += -I$(MTK_CUSTOM_PATH)/imgsensor/inc \
                     -I$(MTK_CUSTOM_PATH)/imgsensor/src/$(CONFIG_MTK_PLATFORM)/camera_hw \
                     -I$(MTK_CUSTOM_PATH)/cam_cal/inc \
                     -I$(CAM_CAL_PLATFORM_SRC_PATH) \
-                    -I$(CAM_CAL_SRC_PATH)/common/$(COMMON_VERSION)
+                    -I$(CAM_CAL_SRC_PATH)/common/$(COMMON_VERSION) \
+					-I$(CAM_CAL_SRC_PATH)/common/
 subdir-ccflags-y += -I$(srctree)/drivers/i2c/busses/
 
 # Common code
 obj-y += ../common/$(COMMON_VERSION)/eeprom_driver.o
 obj-y += ../common/$(COMMON_VERSION)/eeprom_i2c_common_driver.o
 obj-y += ../common/$(COMMON_VERSION)/eeprom_utils.o
+obj-y += ../common/
 
 # Platform code
 obj-y += eeprom_i2c_custom_driver.o

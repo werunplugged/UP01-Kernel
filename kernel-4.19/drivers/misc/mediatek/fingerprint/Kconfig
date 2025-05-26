@@ -1,0 +1,6 @@
+config CUST_FINGERPRINT_SUPPORT
+  bool "CUST_FINGERPRINT_SUPPORT"
+  default n
+
+source "drivers/misc/mediatek/fingerprint/focaltech_ree/Kconfig"
+source "drivers/misc/mediatek/fingerprint/focaltech_tee/Kconfig"

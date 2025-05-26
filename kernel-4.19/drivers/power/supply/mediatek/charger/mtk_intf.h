@@ -7,6 +7,9 @@
 #define __MTK_INTF_H
 
 #include "mtk_charger_intf.h"
+#ifdef CONFIG_RT_HVDV2_SUPPORT
+#include "rt_hvdv2_intf.h"
+#endif
 #include "mtk_pe50.h"
 #include "mtk_pe40.h"
 #include "mtk_pdc.h"

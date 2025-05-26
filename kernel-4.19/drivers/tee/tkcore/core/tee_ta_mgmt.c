@@ -1,6 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2015-2019 TrustKernel Incorporated
+ * All Rights Reserved.
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #include <linux/vmalloc.h>
@@ -215,8 +225,11 @@ int tee_install_sys_ta(struct tee *tee, void __user *u_arg)
 	if (copy_from_user(&uuid, ta_inst_desc.uuid, sizeof(struct TEEC_UUID)))
 		return -EFAULT;
 
+	if (ta_inst_desc.ta_buf_size == 0)
+		return -EINVAL;
+
 	/* check for integer overflow */
-	if (sizeof(struct TEEC_UUID) + sizeof(uint32_t) >=
+	if (sizeof(struct TEEC_UUID) + sizeof(uint32_t) >
 			sizeof(struct TEEC_UUID) + sizeof(uint32_t) +
 			ta_inst_desc.ta_buf_size) {
 		return -ENOMEM;

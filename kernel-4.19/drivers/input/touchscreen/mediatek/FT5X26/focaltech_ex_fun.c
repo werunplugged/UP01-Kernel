@@ -366,7 +366,7 @@ static ssize_t fts_tpfwver_store(struct device *dev,
 int isNumCh(const char ch)
 {
 	int result = 0;
-	/* 获取16进制的高字节位数据 */
+	/* Get the high byte of hexadecimal data */
 	if (ch >= '0' && ch <= '9')
 		result = 1; /* (int)(ch - '0'); */
 	else if (ch >= 'a' && ch <= 'f')
@@ -382,7 +382,7 @@ int isNumCh(const char ch)
 int hexCharToValue(const char ch)
 {
 	int result = 0;
-	/* 获取16进制的高字节位数据 */
+	/* Get the high byte of hexadecimal data */
 	if (ch >= '0' && ch <= '9')
 		result = (int)(ch - '0');
 	else if (ch >= 'a' && ch <= 'f')

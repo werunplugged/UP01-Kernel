@@ -31,6 +31,90 @@ struct mmc_gpio {
 	char cd_label[];
 };
 
+#if !(defined(CONFIG_MACH_MT6779) || defined(CONFIG_MACH_MT6833) || defined(CONFIG_MACH_MT6853) || defined(CONFIG_MACH_MT6877) || defined(CONFIG_MACH_MT6768) || defined(CONFIG_MACH_MT6893))
+static struct timer_list * sd_debance_timer;
+#define SD_DEBANCE_TIME_CHECK  128  // 512 ms - 256ms
+static int irq_card_states;
+static int previous_time_card_states;
+static int sd_card_irq_level=0;
+static int irq_same_state_count=0;
+unsigned long sd_data;
+void mmc_cd_debounce_process(void *dev_id);
+extern unsigned int up_msdc1_cd_irq;
+int up_detect_mmc_card_removed(void *dev_id)
+{
+       struct mmc_host *host = dev_id;
+      int card_insert=0;
+       if(host->ops->get_cd)
+               card_insert=host->ops->get_cd(host);
+      return card_insert;
+}
+static void sd_eint_timer_handler(struct timer_list *timer_list)
+{
+       unsigned int status;
+       struct mmc_host *host = (void *)sd_data;
+	   	struct mmc_gpio *ctx;
+       status = up_detect_mmc_card_removed((void *)sd_data);
+      if(status == previous_time_card_states)
+      {
+           irq_same_state_count ++;
+      }
+       else
+       {
+               previous_time_card_states = status;
+               irq_same_state_count=0;
+       }
+       if(irq_same_state_count>3)
+       {
+               irq_same_state_count=0;
+               printk("sd_eint_timer_handler irq_s=%d, previ_s=%d \n",irq_card_states ,previous_time_card_states);
+               if(previous_time_card_states==irq_card_states)
+               {
+                       printk(int_timer_handler: repo card changed for core and enable irq~~~~ \n");
+                       sd_card_irq_level=~sd_card_irq_level;
+                       if(sd_card_irq_level)
+                               irq_set_irq_type(up_msdc1_cd_irq, IRQF_TRIGGER_HIGH);
+                       else
+                               irq_set_irq_type(up_msdc1_cd_irq, IRQF_TRIGGER_LOW);
+					   ctx = host->slot.handler_priv;
+                       host->trigger_card_event = true;
+                       mmc_detect_change(host, msecs_to_jiffies(200));        
+               }
+               enable_irq(up_msdc1_cd_irq);
+       }
+       else
+       {
+               mmc_cd_debounce_process((void *)sd_data);
+       }
+       return;
+}
+void mmc_cd_debounce_process(void *dev_id)
+{
+       struct timer_list *eint_timer = sd_debance_timer;
+       int cpu = 0;
+       eint_timer->expires = jiffies + msecs_to_jiffies(SD_DEBANCE_TIME_CHECK);
+       printk("debance_timer=%d\n",msecs_to_jiffies(SD_DEBANCE_TIME_CHECK));
+       sd_data = (unsigned long)dev_id;
+       eint_timer->function = sd_eint_timer_handler;
+       if (!timer_pending(eint_timer)) {
+               timer_setup(eint_timer,sd_eint_timer_handler,0);
+               add_timer_on(eint_timer, cpu);
+       }
+}
+static irqreturn_t mmc_gpio_cd_irqt(int irq, void *dev_id)
+{
+       up_msdc1_cd_irq= irq;
+	/* Schedule a card detection after a debounce timeout */
+	//struct mmc_host *host = dev_id;
+       irq_card_states = up_detect_mmc_card_removed(dev_id);
+       previous_time_card_states = irq_card_states;
+       printk("irq_prcess mmc_gpio_cd_irqt irq, card_cd = %d,\n",irq_card_states);
+       disable_irq_nosync(up_msdc1_cd_irq);
+
+       mmc_cd_debounce_process(dev_id);
+       return IRQ_HANDLED;
+}
+#else
 static irqreturn_t mmc_gpio_cd_irqt(int irq, void *dev_id)
 {
 	/* Schedule a card detection after a debounce timeout */
@@ -42,6 +126,7 @@ static irqreturn_t mmc_gpio_cd_irqt(int irq, void *dev_id)
 
 	return IRQ_HANDLED;
 }
+#endif
 
 int mmc_gpio_alloc(struct mmc_host *host)
 {
@@ -145,12 +230,25 @@ void mmc_gpiod_request_cd_irq(struct mmc_host *host)
 		irq = gpiod_to_irq(ctx->cd_gpio);
 
 	if (irq >= 0) {
+#if !(defined(CONFIG_MACH_MT6779) || defined(CONFIG_MACH_MT6833) || defined(CONFIG_MACH_MT6853) || defined(CONFIG_MACH_MT6877) || defined(CONFIG_MACH_MT6768) || defined(CONFIG_MACH_MT6893))
+		if(sd_card_irq_level==0)
+			ret = devm_request_threaded_irq(&host->class_dev, irq,
+				NULL, mmc_gpio_cd_irqt,
+				IRQF_TRIGGER_LOW | IRQF_ONESHOT,
+				ctx->cd_label, host);
+		else
+			ret = devm_request_threaded_irq(&host->class_dev, irq,
+				NULL, mmc_gpio_cd_irqt,
+				IRQF_TRIGGER_HIGH | IRQF_ONESHOT,
+				ctx->cd_label, host);               
+#else
 		if (!ctx->cd_gpio_isr)
 			ctx->cd_gpio_isr = mmc_gpio_cd_irqt;
 		ret = devm_request_threaded_irq(host->parent, irq,
 			NULL, ctx->cd_gpio_isr,
 			IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 			ctx->cd_label, host);
+#endif
 		if (ret < 0)
 			irq = ret;
 	}
@@ -279,7 +377,14 @@ int mmc_gpiod_request_cd(struct mmc_host *host, const char *con_id,
 
 	ctx->override_cd_active_level = override_active_level;
 	ctx->cd_gpio = desc;
-
+#if !(defined(CONFIG_MACH_MT6779) || defined(CONFIG_MACH_MT6833) || defined(CONFIG_MACH_MT6853) || defined(CONFIG_MACH_MT6877)|| defined(CONFIG_MACH_MT6768) || defined(CONFIG_MACH_MT6893))
+	sd_debance_timer =
+			kmalloc(sizeof(struct timer_list) , GFP_KERNEL);
+	sd_debance_timer->expires = 0;
+	sd_data = 0;
+	sd_debance_timer->function = NULL;
+	timer_setup(sd_debance_timer,NULL,0);
+#endif
 	return 0;
 }
 EXPORT_SYMBOL(mmc_gpiod_request_cd);

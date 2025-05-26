@@ -1463,12 +1463,12 @@ static kal_uint32 get_info(
 	sensor_info->SensorClockPolarity =
 		SENSOR_CLOCK_POLARITY_LOW;
 	sensor_info->SensorClockFallingPolarity =
-		SENSOR_CLOCK_POLARITY_LOW; /* not use */
+		SENSOR_CLOCK_POLARITY_LOW; /* Not used */
 	sensor_info->SensorHsyncPolarity = SENSOR_CLOCK_POLARITY_LOW;
 	sensor_info->SensorVsyncPolarity = SENSOR_CLOCK_POLARITY_LOW;
-	sensor_info->SensorInterruptDelayLines = 4; /* not use */
-	sensor_info->SensorResetActiveHigh = FALSE; /* not use */
-	sensor_info->SensorResetDelayCount = 5; /* not use */
+	sensor_info->SensorInterruptDelayLines = 4; /* Not used */
+	sensor_info->SensorResetActiveHigh = FALSE; /* Not used */
+	sensor_info->SensorResetDelayCount = 5; /* Not used */
 
 	sensor_info->SensroInterfaceType =
 		imgsensor_info.sensor_interface_type;
@@ -1487,7 +1487,7 @@ static kal_uint32 get_info(
 	sensor_info->SlimVideoDelayFrame =
 		imgsensor_info.slim_video_delay_frame;
 
-	sensor_info->SensorMasterClockSwitch = 0; /* not use */
+	sensor_info->SensorMasterClockSwitch = 0; /* Not used */
 	sensor_info->SensorDrivingCurrent =
 		imgsensor_info.isp_driving_current;
 /* The frame of setting shutter default 0 for TG int */
@@ -1507,11 +1507,11 @@ static kal_uint32 get_info(
 	sensor_info->SensorMIPILaneNumber =
 		imgsensor_info.mipi_lane_num;
 	sensor_info->SensorClockFreq = imgsensor_info.mclk;
-	sensor_info->SensorClockDividCount = 3; /* not use */
+	sensor_info->SensorClockDividCount = 3; /* Not used */
 	sensor_info->SensorClockRisingCount = 0;
-	sensor_info->SensorClockFallingCount = 2; /* not use */
-	sensor_info->SensorPixelClockCount = 3; /* not use */
-	sensor_info->SensorDataLatchCount = 2; /* not use */
+	sensor_info->SensorClockFallingCount = 2; /* Not used */
+	sensor_info->SensorPixelClockCount = 3; /* Not used */
+	sensor_info->SensorDataLatchCount = 2; /* Not used */
 
 	sensor_info->MIPIDataLowPwr2HighSpeedTermDelayCount = 0;
 	sensor_info->MIPICLKLowPwr2HighSpeedTermDelayCount = 0;

@@ -86,7 +86,7 @@ static void accdet_mod_exit(void)
 	platform_driver_unregister(&accdet_driver);
 }
 
-module_init(accdet_mod_init);
+late_initcall_sync(accdet_mod_init);
 module_exit(accdet_mod_exit);
 
 module_param(debug_enable_drv, int, 0644);

@@ -30,8 +30,10 @@ int mtk_pe50_init(struct charger_manager *chgmgr)
 	int ret;
 	struct mtk_pe50 *pe50 = &chgmgr->pe5;
 
-	if (!chgmgr->enable_pe_5)
+	chr_info("%s: enable_pe_5 = %d\n", __func__, chgmgr->enable_pe_5);
+	if (!chgmgr->enable_pe_5) {
 		return -ENOTSUPP;
+	}
 
 	pe50->pca_algo = prop_chgalgo_dev_get_by_name("pca_algo_dv2");
 	if (!pe50->pca_algo) {
@@ -46,6 +48,8 @@ int mtk_pe50_init(struct charger_manager *chgmgr)
 		}
 		pe50->nb.notifier_call = __pe50_notifier_call;
 		ret = prop_chgalgo_notifier_register(pe50->pca_algo, &pe50->nb);
+		if (ret < 0)
+			chr_err("[PE50] chgalgo_notifier_register fail\n");
 
 		pe50->is_enabled = true;
 	}
@@ -57,6 +61,7 @@ int mtk_pe50_deinit(struct charger_manager *chgmgr)
 {
 	struct mtk_pe50 *pe50 = &chgmgr->pe5;
 
+	chr_info("%s: enable_pe_5 = %d\n", __func__, chgmgr->enable_pe_5);
 	if (!chgmgr->enable_pe_5)
 		return -ENOTSUPP;
 	if (!pe50->pca_algo)
@@ -69,6 +74,8 @@ bool mtk_pe50_is_ready(struct charger_manager *chgmgr)
 {
 	struct mtk_pe50 *pe50 = &chgmgr->pe5;
 
+	chr_info("%s: enable_pe_5 = %d, enable_hv_charging = %d\n",
+		__func__, chgmgr->enable_pe_5, chgmgr->enable_hv_charging);
 	if (!chgmgr->enable_pe_5 || !chgmgr->enable_hv_charging)
 		return false;
 	return prop_chgalgo_is_algo_ready(pe50->pca_algo);
@@ -79,10 +86,14 @@ int mtk_pe50_start(struct charger_manager *chgmgr)
 	int ret;
 	struct mtk_pe50 *pe50 = &chgmgr->pe5;
 
+	chr_info("%s: enable_pe_5 = %d, enable_hv_charging = %d\n",
+		__func__, chgmgr->enable_pe_5, chgmgr->enable_hv_charging);
 	charger_enable_vbus_ovp(chgmgr, false);
 	ret = prop_chgalgo_start_algo(pe50->pca_algo);
-	if (ret < 0)
+	if (ret < 0) {
 		charger_enable_vbus_ovp(chgmgr, true);
+		chr_err("%s: start algo fail (%d)\n", __func__, ret);
+	}
 	return ret;
 }
 
@@ -94,6 +105,7 @@ bool mtk_pe50_is_running(struct charger_manager *chgmgr)
 	running = prop_chgalgo_is_algo_running(pe50->pca_algo);
 	if (!running)
 		charger_enable_vbus_ovp(chgmgr, true);
+	chr_info("%s: %d\n", __func__, running);
 	return running;
 }
 

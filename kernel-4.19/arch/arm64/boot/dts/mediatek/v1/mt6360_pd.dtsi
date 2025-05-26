@@ -18,10 +18,12 @@
 		/* the number of notifier supply */
 		mt-tcpc,notifier_supply_num = <2>;
 #endif
-		mt6360pd,intr_gpio = <&pio 24 0x0>;
-		mt6360pd,intr_gpio_num = <24>;
+		mt6360pd,intr_gpio = <&pio __CUST_MT6360_TYPEC_PD_PIN_NUM__ 0x0>;
+		mt6360pd,intr_gpio_num = <__CUST_MT6360_TYPEC_PD_PIN_NUM__>;
+/*
 		mt6360pd,pcb_gpio = <&pio 16 0x0>;
 		mt6360pd,pcb_gpio_num = <16>;
+*/
 		/* 0: gpio low as phone, 1: gpio high as phone */
 		mt6360pd,pcb_gpio_polarity = <0>;
 		interrupt-parent = <&mt6360_pmu>;

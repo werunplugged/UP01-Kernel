@@ -1,6 +1,16 @@
 /* SPDX-License-Identifier: GPL-2.0
  *
  * Copyright (c) 2015-2019 TrustKernel Incorporated
+ * All Rights Reserved.
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #ifndef TEESMC_ST_H
@@ -68,6 +78,31 @@
 	TEESMC_CALL_VAL(TEESMC_32, TEESMC_FAST_CALL, TEESMC_OWNER_TRUSTED_OS, \
 			TKCORE_FUNCID_TRACE_CONFIG)
 
+#define TEESMC_TKCORE_FUNCID_ADD_SHM	0x5704
+#define TEESMC32_TKCORE_FASTCALL_ADD_SHM \
+	TEESMC_CALL_VAL(TEESMC_32, \
+		TEESMC_FAST_CALL, \
+		TEESMC_OWNER_TRUSTED_OS, \
+		TEESMC_TKCORE_FUNCID_ADD_SHM)
+
+#define TEESMC64_TKCORE_FASTCALL_ADD_SHM \
+	TEESMC_CALL_VAL(TEESMC_64, \
+		TEESMC_FAST_CALL, \
+		TEESMC_OWNER_TRUSTED_OS, \
+		TEESMC_TKCORE_FUNCID_ADD_SHM)
+
+#define TEESMC_TKCORE_FUNCID_SET_LOG_BUFFER		0x5705
+#define TEESMC32_TKCORE_FASTCALL_SET_LOG_BUFFER \
+	TEESMC_CALL_VAL(TEESMC_32, \
+		TEESMC_FAST_CALL, \
+		TEESMC_OWNER_TRUSTED_OS, \
+		TEESMC_TKCORE_FUNCID_SET_LOG_BUFFER)
+
+#define TEESMC64_TKCORE_FASTCALL_SET_LOG_BUFFER \
+	TEESMC_CALL_VAL(TEESMC_64, \
+		TEESMC_FAST_CALL, \
+		TEESMC_OWNER_TRUSTED_OS, \
+		TEESMC_TKCORE_FUNCID_SET_LOG_BUFFER)
 /*
  * Configures TZ/NS shared mutex for outer cache maintenance
  *
@@ -126,7 +161,6 @@
 #define TEESMC_ST_RPC_FUNC_ALLOC_PAYLOAD	0x5700
 #define TEESMC_RETURN_ST_RPC_ALLOC_PAYLOAD	\
 		TEESMC_RPC_VAL(TEESMC_ST_RPC_FUNC_ALLOC_PAYLOAD)
-
 
 /*
  * Free memory previously allocated by TEESMC_RETURN_ST_RPC_ALLOC_PAYLOAD

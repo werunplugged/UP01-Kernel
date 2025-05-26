@@ -8,10 +8,18 @@
 #include "eeprom_i2c_common_driver.h"
 #include "eeprom_i2c_custom_driver.h"
 #include "kd_imgsensor.h"
+#include <linux/cust_include/cust_project_all_config.h>
 
+#if defined(S5KHM2SP_OTP)
+#include "s5khm2sp_otp/s5khm2sp_otp_cam_cal.h"
+#endif
 #define MAX_EEPROM_SIZE_16K 0x4000
 
 struct stCAM_CAL_LIST_STRUCT g_camCalList[] = {
+#if defined(S5KHM2SP_OTP)
+	{S5KHM2SP_SENSOR_ID, 0xA0, s5khm2sp_selective_read_region},
+#endif
+#if 0
 	/*Below is commom sensor */
 	{IMX586_SENSOR_ID, 0xA0, Common_read_region, MAX_EEPROM_SIZE_16K,
 		BL24SA64_write_region},
@@ -35,6 +43,7 @@ struct stCAM_CAL_LIST_STRUCT g_camCalList[] = {
 	{IMX481_SENSOR_ID, 0xA4, Common_read_region, DEFAULT_MAX_EEPROM_SIZE_8K,
 		BL24SA64_write_region},
 	/*  ADD before this line */
+#endif
 	{0, 0, 0}       /*end of list */
 };
 

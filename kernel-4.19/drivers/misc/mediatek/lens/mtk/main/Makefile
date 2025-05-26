@@ -23,6 +23,9 @@ MTK_CUSTOM_PATH  := $(srctree)/drivers/misc/mediatek
 
 subdir-ccflags-y += -I$(MTK_CUSTOM_PATH)/lens/mtk/main/inc
 subdir-ccflags-y += -I$(MTK_CUSTOM_PATH)/lens/mtk/main/common/lc898122af
+ifeq ($(CONFIG_MTK_LENS_DW9800AF_SUPPORT), y)
+subdir-ccflags-y += -I$(MTK_CUSTOM_PATH)/lens/mtk/main/common/dw9800af
+endif
 subdir-ccflags-y += -I$(MTK_CUSTOM_PATH)/lens/mtk/main/common/lc898212xdaf/inc
 ifeq ($(CONFIG_MTK_LENS_BU63165AF_SUPPORT), y)
   subdir-ccflags-y += -I$(MTK_CUSTOM_PATH)/lens/mtk/main/common/bu63165af/inc
@@ -43,6 +46,9 @@ mainaf-y  += common/bu64748af/bu64748_function.o
 mainaf-y  += common/bu64748af/bu64748af.o
 mainaf-y  += common/dw9714af/DW9714AF.o
 mainaf-y  += common/dw9800waf/DW9800WAF.o
+ifeq ($(CONFIG_MTK_LENS_DW9800AF_SUPPORT), y)
+mainaf-y  += common/dw9800af/DW9800AF.o
+endif
 mainaf-y  += common/dw9814af/DW9814AF.o
 mainaf-y  += common/dw9718af/DW9718AF.o
 mainaf-y  += common/dw9718gaf/DW9718AF.o
@@ -75,4 +81,6 @@ mainaf-y  += common/bu63169af/OIS_user.o
 mainaf-y  += common/bu64253gwzaf/BU64253GWZAF.o
 mainaf-y  += common/gt9768af/GT9768AF.o
 mainaf-y  += common/gt9772af/GT9772AF.o
-
+ifeq ($(CONFIG_MTK_LENS_AW8601AF_SUPPORT), y)
+mainaf-y  += common/aw8601af/AW8601AF.o
+endif

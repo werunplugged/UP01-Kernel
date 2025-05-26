@@ -210,7 +210,8 @@ int adapter_is_support_pd(void)
 
 	if (pinfo->pd_type == MTK_PD_CONNECT_PE_READY_SNK_APDO &&
 		pinfo->enable_pe_4 == false &&
-		pinfo->enable_pe_5 == false)
+		pinfo->enable_pe_5 == false &&
+		pinfo->enable_hvdv2 == false)
 		return true;
 
 	return false;

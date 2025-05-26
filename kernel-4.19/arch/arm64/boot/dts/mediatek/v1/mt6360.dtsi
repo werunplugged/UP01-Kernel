@@ -7,17 +7,17 @@
 	mt6360_pmu: mt6360_pmu_dts {
 		status = "ok";
 #if defined (CONFIG_MACH_MT6877)
-		mt6360,intr_gpio_num = <4>; /* direct defined GPIO num */
-		mt6360,intr_gpio = <&pio 4 0x0>; /* GPIO */
+		mt6360,intr_gpio_num = <__CUST_MT6360_USB_EINT_PIN_NUM__>; /* direct defined GPIO num */
+		mt6360,intr_gpio = <&pio __CUST_MT6360_USB_EINT_PIN_NUM__ 0x0>; /* GPIO */
 #elif defined (CONFIG_MACH_MT6833)
-		mt6360,intr_gpio_num = <10>; /* direct defined GPIO num */
-		mt6360,intr_gpio = <&pio 10 0x0>; /* GPIO */
+		mt6360,intr_gpio_num = <__CUST_MT6360_USB_EINT_PIN_NUM__>; /* direct defined GPIO num */
+		mt6360,intr_gpio = <&pio __CUST_MT6360_USB_EINT_PIN_NUM__ 0x0>; /* GPIO */
 #elif defined (CONFIG_MACH_MT6873)
 		mt6360,intr_gpio_num = <24>; /* direct defined GPIO num */
 		mt6360,intr_gpio = <&pio 24 0x0>;
 #else
-		mt6360,intr_gpio_num = <3>; /* direct defined GPIO num */
-		mt6360,intr_gpio = <&pio 3 0x0>; /* GPIO */
+		mt6360,intr_gpio_num = <__CUST_MT6360_USB_EINT_PIN_NUM__>; /* direct defined GPIO num */
+		mt6360,intr_gpio = <&pio __CUST_MT6360_USB_EINT_PIN_NUM__ 0x0>; /* GPIO */
 #endif
 		interrupt-controller;
 		#interrupt-cells = <2>;
@@ -54,8 +54,16 @@
 			ichg = <2000000>;		/* uA */
 			aicr = <500000>;		/* uA */
 			mivr = <4400000>;		/* uV */
+#ifdef __CUST_BATTERY_VOLTAGE__
+			cv = <__CUST_BATTERY_VOLTAGE__>;
+#else
 			cv = <4350000>;			/* uA */
+#endif
+#ifdef __CUST_CHARGING_IEOC_CURRENT__
+			ieoc = <__CUST_CHARGING_IEOC_CURRENT__>;
+#else
 			ieoc = <150000>;		/* uA */
+#endif
 			safety_timer = <12>;		/* hour */
 			ircmp_resistor = <25000>;	/* uohm */
 			ircmp_vclamp = <32000>;		/* uV */

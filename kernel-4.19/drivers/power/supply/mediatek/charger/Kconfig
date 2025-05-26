@@ -63,6 +63,19 @@ config MTK_PUMP_EXPRESS_50_SUPPORT
 	  Set Yes to enable PE5.0
 	  Set No to disable PE5.0
 
+config RT_HVDV2_SUPPORT
+	bool "Richtek High Voltage Divide By 2"
+	default n
+	select RT_PROP_CHGALGO
+	depends on MTK_CHARGER
+	help
+	  Fast charging technology using high voltage divider charger to
+	  achieve better charging ability.
+	  It has higher charging efficiency and better thermal performance than
+	  using switching charger.
+	  Set Yes to enable HVDV2
+	  Set No to disable HVDV2
+
 config MTK_DUAL_CHARGER_SUPPORT
 	bool "MediaTek dual charger support"
 	depends on MTK_CHARGER
@@ -154,11 +167,30 @@ config CHARGER_RT9471
 	  which RT9470D, RT9471D and RT9472D support BC1.2
 	  It depends on config MTK_CHARGER.
 
+config CHARGER_RT9758
+	bool "Richtek RT9758 High Voltage Divider Charger Driver"
+	default n
+	depends on MTK_CHARGER
+	help
+	  Say Y here to enable support of rt9758 high voltage divider charger
+	  It is mainly used as divider charger for
+	  direct charge
+	  It depends on config MTK_CHARGER
+
 config CHARGER_RT9759
 	bool "Richtek RT9759 Divider Charger Driver"
 	depends on MTK_CHARGER
 	help
 	  Say Y here to enable support of rt9759 divider charger
+	  It is mainly used as divider charger for
+	  direct charge
+	  It depends on config MTK_CHARGER
+
+config CHARGER_NU2105
+	bool "NU2105 Divider Charger Driver"
+	depends on MTK_CHARGER
+	help
+	  Say Y here to enable support of NU2105 divider charger
 	  It is mainly used as divider charger for
 	  direct charge
 	  It depends on config MTK_CHARGER
@@ -170,6 +202,26 @@ config RT_PROP_CHGALGO
 	  Richtek Proprietary charging algorithm
 	  Say N to disable
 	  Richtek Proprietary charging algorithm
+
+config PROP_TA_CLASS
+	bool "Proprietary TA Class"
+	default n
+	help
+	  Say Y here to enable support of proprietary TA class
+	  It provides a series of operations to support proprietary TA
+	  so that vendor can write driver of TA based on this class to provide
+	  control interfaces to charging algorithm
+
+config RFC_TA
+	tristate "Richtek Fast Charge TA Driver"
+	default n
+	depends on PROP_TA_CLASS
+	select CRC8
+	help
+	  Say m here to build RFC driver as module.
+	  It registers prop_ta_class and controls richtek fast charge TA.
+	  For example, you are able to control voltage & current of RFC TA
+	  through this driver.
 
 config MTK_CHARGER_UNLIMITED
 	bool "MediaTek Charger Unlimited"
@@ -187,6 +239,12 @@ config CHARGER_HL7005
 	  Say Y to enable
 	  Halo HL7005 driver.
 	  It depends on config MTK_SWCHR_SUPPORT.
+
+config CHARGER_HL7227
+	bool "Charger Driver for Halo HL7227 Charger IC"
+	help
+	  Say Y to enable
+	  Halo HL7227 driver.
 
 config CHARGER_BQ25601
 	bool "CHARGER_BQ25601"
@@ -230,9 +288,35 @@ config LOAD_SWITCH_RT9750
 	  which is good for direct charge.
 	  It depends on config MTK_CHARGER.
 
+config CHARGER_SGM41511_SUPPORT
+	bool "Charger Driver for Halo SGM41511 Charger IC"
+	default n
+	depends on MTK_CHARGER
+	help
+	  Say Y to enable
+	  Halo SGM41511 driver.
+	  It depends on config MTK_CHARGER.
+	 
 config CHARGER_MM8013
 	bool "CHARGER MM8013"
 	help
 	  Say Y to enable
 	  mm8013 driver.
 	  Set to Yes if MM8013 is used.
+config CHARGER_PSC5415A
+	bool "Charger Driver for Richtek RT9466 Charger IC"
+	depends on MTK_CHARGER
+	help
+	  Say Yes to enable Richtek PSC5415A driver.
+	  It is mainly used as slave IC for dual charger
+	  application.
+	  It depends on config MTK_CHARGER.
+
+config CHARGER_BCT24157
+	bool "Charger Driver for BCT24157 Charger IC"
+	depends on MTK_CHARGER
+	help
+	  Say Yes to enable Richtek BCT24157 driver.
+	  It is mainly used as slave IC for dual charger
+	  application.
+	  It depends on config MTK_CHARGER.

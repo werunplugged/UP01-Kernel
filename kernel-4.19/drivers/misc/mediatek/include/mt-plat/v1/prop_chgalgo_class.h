@@ -178,6 +178,7 @@ struct prop_chgalgo_chg_ops {
 
 struct prop_chgalgo_algo_ops {
 	int (*init_algo)(struct prop_chgalgo_device *pca);
+	bool (*is_algo_init)(struct prop_chgalgo_device *pca);
 	bool (*is_algo_ready)(struct prop_chgalgo_device *pca);
 	int (*start_algo)(struct prop_chgalgo_device *pca);
 	bool (*is_algo_running)(struct prop_chgalgo_device *pca);
@@ -305,6 +306,7 @@ extern int prop_chgalgo_dump_registers(struct prop_chgalgo_device *pca);
 /* Richtek pca algorithm interface */
 #ifdef CONFIG_RT_PROP_CHGALGO
 extern int prop_chgalgo_init_algo(struct prop_chgalgo_device *pca);
+extern bool prop_chgalgo_is_algo_init(struct prop_chgalgo_device *pca);
 extern bool prop_chgalgo_is_algo_ready(struct prop_chgalgo_device *pca);
 extern int prop_chgalgo_start_algo(struct prop_chgalgo_device *pca);
 extern bool prop_chgalgo_is_algo_running(struct prop_chgalgo_device *pca);

@@ -25,7 +25,7 @@ struct REGULATOR_CTRL regulator_control[REGULATOR_TYPE_MAX_NUM] = {
 #ifdef CONFIG_REGULATOR_RT5133
 	{"vcama1"},
 #endif
-#if defined(IMGSENSOR_MT6781) || defined(IMGSENSOR_MT6877)
+#if 0// defined(IMGSENSOR_MT6781) || defined(IMGSENSOR_MT6877)
 	{"vcamaf"},
 #endif
 	{"vcamd"},
