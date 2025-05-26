@@ -12,6 +12,8 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/types.h>
+#include <mt-plat/mtk_boot.h>
+#include <asm/atomic.h>
 
 #ifdef CONFIG_OF
 /* device tree */
@@ -51,12 +53,33 @@
 #if defined(CONFIG_MTK_CAM_SECURE_I2C)
 #include "imgsensor_ca.h"
 #endif
+#ifdef CONFIG_RT_PROP_CHGALGO
+#include "v1/mtk_charger.h"
+#endif
 
 static DEFINE_MUTEX(gimgsensor_mutex);
 static DEFINE_MUTEX(gimgsensor_open_mutex);
 
 struct IMGSENSOR gimgsensor;
 MUINT32 last_id;
+
+#ifdef CONFIG_CUST_DEVICE_INFO_SUPPORT
+extern int up_set_camera_device_used(char * module_name, int pdata);
+typedef enum 
+{ 
+    DEVICE_SUPPORTED = 0,        
+    DEVICE_USED = 1,
+}compatible_type;
+#endif
+
+extern int is_up_cts_board(void);
+__weak int is_up_cts_board(void)
+{
+        printk("[kd_sensorlist]. is_up_cts_board. dummy. \n");
+	return  0;
+}
+
+
 
 /******************************************************************************
  * Profiling
@@ -146,6 +169,43 @@ static void imgsensor_mutex_unlock(struct IMGSENSOR_SENSOR_INST *psensor_inst)
 #endif
 }
 
+#if (__CUST_DUAL_CAMERA_USEDBY_YUV_MODE__ || __CUST_DUAL_SUB_CAMERA__)
+static char buf_yuv_name[32] = {0};
+char up_fake_open = 0;
+
+extern enum IMGSENSOR_RETURN gc0310_imgsensor_hw_power_sequence(
+	struct IMGSENSOR_HW             *phw,
+	enum   IMGSENSOR_SENSOR_IDX      sensor_idx,
+	enum   IMGSENSOR_HW_POWER_STATUS pwr_status,
+	struct IMGSENSOR_HW_POWER_SEQ   *ppower_sequence,
+	char *pcurr_idx);
+#endif
+
+#if __CUST_DUAL_CAMERA_USEDBY_YUV_MODE__
+#define MainFakeFunc SensorFuncGC0310YUV_1
+#endif
+
+#if __CUST_DUAL_SUB_CAMERA__
+#define SubFakeFunc SensorFuncGC0310YUV_1
+#endif
+
+#if __CUST_MAIN_FAKE_I2C_USE_SUB__ || __CUST_SUB_FAKE_I2C_USE_MAIN__ || __CUST_MAIN_FAKE_I2C_USE_SUB2__ || __CUST_MAIN_FAKE_I2C_USE_MAIN2__
+atomic_t up_cam_suspend;
+#endif
+
+#if __CUST_MAIN_FAKE_I2C_USE_SUB__ || __CUST_MAIN_FAKE_I2C_USE_SUB2__ || __CUST_MAIN_FAKE_I2C_USE_MAIN2__
+char main_fake_i2c_flag = 0;
+#endif
+
+#if __CUST_SUB_FAKE_I2C_USE_MAIN__
+char sub_fake_i2c_flag = 0;
+#endif
+// add over
+#ifdef CONFIG_RT_PROP_CHGALGO
+static struct charger_consumer *img_charger_consumer;
+#endif
+
+
 MINT32 imgsensor_sensor_open(struct IMGSENSOR_SENSOR *psensor)
 {
 	MINT32 ret = ERROR_NONE;
@@ -163,7 +223,13 @@ MINT32 imgsensor_sensor_open(struct IMGSENSOR_SENSOR *psensor)
 	struct i2c_client *pi2c_client = NULL;
 #endif
 
+
+
 	IMGSENSOR_FUNCTION_ENTRY();
+#ifdef CONFIG_RT_PROP_CHGALGO
+	charger_manager_enable_high_voltage_charging(
+		img_charger_consumer, false);
+#endif
 
 	if (psensor_func && psensor_func->SensorOpen && psensor_inst) {
 
@@ -236,6 +302,106 @@ MINT32 imgsensor_sensor_open(struct IMGSENSOR_SENSOR *psensor)
 
 	IMGSENSOR_FUNCTION_EXIT();
 
+
+#if __CUST_DUAL_CAMERA_USEDBY_YUV_MODE__
+	if(psensor->inst.sensor_idx == IMGSENSOR_SENSOR_IDX_MAIN)
+	{
+			if (ret == ERROR_NONE)
+			{
+				strcpy(buf_yuv_name, SENSOR_DRVNAME_GC0310_MIPI_YUV);
+
+#if __CUST_MAIN_FAKE_I2C_USE_SUB__
+{
+				struct IMGSENSOR_SENSOR *psensor_mainfake = NULL;
+				psensor_mainfake = imgsensor_sensor_get_inst(IMGSENSOR_SENSOR_IDX_SUB);
+				if (psensor_mainfake != NULL) {
+					psensor_mainfake->inst.sensor_idx = IMGSENSOR_SENSOR_IDX_SUB;
+					psensor_inst = &psensor_mainfake->inst;
+				}
+}
+#endif
+
+#if __CUST_MAIN_FAKE_I2C_USE_MAIN2__
+{
+				struct IMGSENSOR_SENSOR *psensor_mainfake = NULL;
+				psensor_mainfake = imgsensor_sensor_get_inst(IMGSENSOR_SENSOR_IDX_MAIN2);
+				if (psensor_mainfake != NULL) {
+					psensor_mainfake->inst.sensor_idx = IMGSENSOR_SENSOR_IDX_MAIN2;
+					psensor_inst = &psensor_mainfake->inst;
+				}
+}
+#endif
+
+#if __CUST_MAIN_FAKE_I2C_USE_SUB2__
+{
+				struct IMGSENSOR_SENSOR *psensor_mainfake = NULL;
+				psensor_mainfake = imgsensor_sensor_get_inst(IMGSENSOR_SENSOR_IDX_SUB2);
+				if (psensor_mainfake != NULL) {
+					psensor_mainfake->inst.sensor_idx = IMGSENSOR_SENSOR_IDX_SUB2;
+					psensor_inst = &psensor_mainfake->inst;
+				}
+}
+#endif
+     			imgsensor_mutex_lock(psensor_inst);
+				gc0310_imgsensor_hw_power_sequence(&pimgsensor->hw, IMGSENSOR_SENSOR_IDX_SUB2, IMGSENSOR_HW_POWER_STATUS_ON, sensor_power_sequence, buf_yuv_name);
+
+				if(MainFakeFunc.SensorOpen() == ERROR_NONE)
+				{
+					printk("add Main Fake %s SensorOpen Successfull", buf_yuv_name);
+					up_fake_open = 1;
+#if __CUST_MAIN_FAKE_I2C_USE_SUB__ || __CUST_MAIN_FAKE_I2C_USE_SUB2__ || __CUST_MAIN_FAKE_I2C_USE_MAIN2__
+					main_fake_i2c_flag = 1;
+#endif
+				}
+				else
+		        {
+		          if (FACTORY_BOOT == get_boot_mode() || ATE_FACTORY_BOOT == get_boot_mode())
+		            ret = ret | ERROR_SENSOR_CONNECT_FAIL;
+          		  gc0310_imgsensor_hw_power_sequence(&pimgsensor->hw, IMGSENSOR_SENSOR_IDX_SUB2, IMGSENSOR_HW_POWER_STATUS_OFF, sensor_power_sequence, buf_yuv_name);
+       			}
+				imgsensor_mutex_unlock(psensor_inst);
+			}
+	}
+#endif
+
+#if __CUST_DUAL_SUB_CAMERA__
+	if(psensor->inst.sensor_idx == IMGSENSOR_SENSOR_IDX_SUB)
+		{
+			if (ret == ERROR_NONE)
+			{
+				strcpy(buf_yuv_name, SENSOR_DRVNAME_GC0310_MIPI_YUV);
+#if __CUST_SUB_FAKE_I2C_USE_MAIN__
+{
+				struct IMGSENSOR_SENSOR *psensor_subfake = NULL;
+				psensor_subfake = imgsensor_sensor_get_inst(IMGSENSOR_SENSOR_IDX_MAIN);
+				if (psensor_subfake != NULL) {
+					psensor_subfake->inst.sensor_idx = IMGSENSOR_SENSOR_IDX_MAIN;
+					psensor_inst = &psensor_subfake->inst;
+				}
+}
+#endif
+        		imgsensor_mutex_lock(psensor_inst);
+				gc0310_imgsensor_hw_power_sequence(&pimgsensor->hw, IMGSENSOR_SENSOR_IDX_SUB_FAKE, IMGSENSOR_HW_POWER_STATUS_ON, sensor_power_sequence, buf_yuv_name);
+
+				if(SubFakeFunc.SensorOpen() == ERROR_NONE)
+				{
+					up_fake_open = 1;
+#if __CUST_SUB_FAKE_I2C_USE_MAIN__
+					sub_fake_i2c_flag = 1;
+#endif
+				}
+				else
+		        {
+		          if (FACTORY_BOOT == get_boot_mode() || ATE_FACTORY_BOOT == get_boot_mode())
+		            ret = ret || ERROR_SENSOR_CONNECT_FAIL;
+
+          		  gc0310_imgsensor_hw_power_sequence(&pimgsensor->hw, IMGSENSOR_SENSOR_IDX_SUB_FAKE, IMGSENSOR_HW_POWER_STATUS_OFF, sensor_power_sequence, buf_yuv_name);
+        		}
+
+				imgsensor_mutex_unlock(psensor_inst);
+			}
+		}
+#endif
 	return ret;
 }
 
@@ -441,6 +607,8 @@ MINT32 imgsensor_sensor_close(struct IMGSENSOR_SENSOR *psensor)
 
 	IMGSENSOR_FUNCTION_ENTRY();
 
+
+
 	if (psensor_func &&
 	    psensor_func->SensorClose &&
 	    psensor_inst) {
@@ -483,6 +651,53 @@ MINT32 imgsensor_sensor_close(struct IMGSENSOR_SENSOR *psensor)
 
 	IMGSENSOR_FUNCTION_EXIT();
 
+#if __CUST_DUAL_CAMERA_USEDBY_YUV_MODE__
+	if(psensor->inst.sensor_idx == IMGSENSOR_SENSOR_IDX_MAIN)
+		{
+
+			if (ret == ERROR_NONE)
+			{
+				strcpy(buf_yuv_name, SENSOR_DRVNAME_GC0310_MIPI_YUV);
+
+        		imgsensor_mutex_lock(psensor_inst);
+				gc0310_imgsensor_hw_power_sequence(&pimgsensor->hw, IMGSENSOR_SENSOR_IDX_SUB2, IMGSENSOR_HW_POWER_STATUS_OFF, sensor_power_sequence, buf_yuv_name);
+        		imgsensor_mutex_unlock(psensor_inst);
+
+				up_fake_open = 0;
+#if __CUST_MAIN_FAKE_I2C_USE_SUB__ || __CUST_MAIN_FAKE_I2C_USE_SUB2__ || __CUST_MAIN_FAKE_I2C_USE_MAIN2__
+				main_fake_i2c_flag = 0;
+#endif
+			}
+		}
+#endif
+
+#if __CUST_DUAL_SUB_CAMERA__
+	if(psensor->inst.sensor_idx == IMGSENSOR_SENSOR_IDX_SUB)
+		{
+			// Sub Fake Power Off
+			if (ret == ERROR_NONE)
+			{
+		        #ifdef SP0A38_MIPI_YUV
+		        	strcpy(buf_yuv_name, SENSOR_DRVNAME_SP0A38_MIPI_YUV);
+		        #else
+				strcpy(buf_yuv_name, SENSOR_DRVNAME_GC0310_MIPI_YUV);
+        		#endif
+
+		        imgsensor_mutex_lock(psensor_inst);
+				gc0310_imgsensor_hw_power_sequence(&pimgsensor->hw, IMGSENSOR_SENSOR_IDX_SUB_FAKE, IMGSENSOR_HW_POWER_STATUS_OFF, sensor_power_sequence, buf_yuv_name);
+		        imgsensor_mutex_unlock(psensor_inst);
+
+				up_fake_open = 0;
+#if __CUST_SUB_FAKE_I2C_USE_MAIN__
+				sub_fake_i2c_flag = 0;
+#endif
+			}
+		}
+#endif
+#ifdef CONFIG_RT_PROP_CHGALGO
+	charger_manager_enable_high_voltage_charging(
+		img_charger_consumer, true);
+#endif
 	return ret;
 }
 
@@ -592,6 +807,11 @@ int imgsensor_set_driver(struct IMGSENSOR_SENSOR *psensor)
 					__func__,
 					psensor_inst->sensor_idx,
 					psensor_inst->psensor_list->name);
+
+#ifdef CONFIG_CUST_DEVICE_INFO_SUPPORT
+				up_set_camera_device_used(psensor_inst->psensor_list->name, psensor_inst->sensor_idx+1);
+#endif
+
 					ret = 0;
 					break;
 				}
@@ -1093,6 +1313,7 @@ static inline int adopt_CAMERA_HW_FeatureControl(void *pBuf)
 
 		break;
 	}
+
 
 	case SENSOR_FEATURE_CHECK_IS_ALIVE:
 		imgsensor_check_is_alive(psensor);
@@ -2277,7 +2498,15 @@ static long imgsensor_ioctl(
 		break;
 
 	case KDIMGSENSORIOC_X_CONTROL:
+#if __CUST_MAIN_FAKE_I2C_USE_SUB__ || __CUST_SUB_FAKE_I2C_USE_MAIN__
+		atomic_set(&up_cam_suspend, 1);
+		PK_DBG("up_cam_suspend 1\n");
 		i4RetValue = adopt_CAMERA_HW_Control(pBuff);
+		atomic_set(&up_cam_suspend, 0);
+		PK_DBG("up_cam_suspend 0\n");
+#else
+		i4RetValue = adopt_CAMERA_HW_Control(pBuff);
+#endif
 		break;
 
 	default:
@@ -2368,6 +2597,10 @@ static int imgsensor_probe(struct platform_device *pplatform_device)
 	struct IMGSENSOR_HW *phw = &pimgsensor->hw;
 	struct device *pdevice;
 
+#if __CUST_MAIN_FAKE_I2C_USE_SUB__ || __CUST_SUB_FAKE_I2C_USE_MAIN__
+	atomic_set(&up_cam_suspend, 0);
+#endif
+
 	/* Register char driver */
 	if (alloc_chrdev_region(&pimgsensor->dev_no, 0, 1,
 			IMGSENSOR_DEV_NAME)) {
@@ -2421,7 +2654,13 @@ static int imgsensor_probe(struct platform_device *pplatform_device)
 #ifdef IMGSENSOR_OC_ENABLE
 	imgsensor_oc_init();
 #endif
-
+#ifdef CONFIG_RT_PROP_CHGALGO
+	img_charger_consumer = charger_manager_get_by_name(
+			&pplatform_device->dev, "charger_port1");
+	if (!img_charger_consumer) {
+		pr_info("Failed to get img_charger_consumer manager.\n");
+	}
+#endif
 	return 0;
 }
 
@@ -2472,6 +2711,63 @@ static struct platform_driver gimgsensor_platform_driver = {
 		}
 };
 
+#if  (__CUST_DUAL_CAMERA_USEDBY_YUV_MODE__ || __CUST_DUAL_SUB_CAMERA__)
+extern int yuvcamera_create_attr(struct device_driver *driver);
+extern int yuvcamera_delete_attr(struct device_driver *driver);
+#endif
+
+extern int up_otp_state_main,up_otp_state_sub,otp_state;
+static ssize_t camera_show_otp(struct device_driver *ddri, char *buf)
+{
+    printk("%s  : up_otp_state_main: %d up_otp_state_sub:%d s5k4h7:%d \n", __func__,up_otp_state_main,up_otp_state_sub,otp_state);
+    return sprintf(buf, "%d %d %d \n", up_otp_state_main,up_otp_state_sub,otp_state);
+}
+static DRIVER_ATTR(camera_otp,  0664, camera_show_otp, NULL);
+
+
+kal_uint32 up_hdrconfig = 1;
+static ssize_t hdrconfig_show_value(struct device_driver *ddri, char *buf)
+{
+    printk("up_hdrconfig = %d\n", __func__, up_hdrconfig);
+
+    return sprintf(buf, "%d\n", up_hdrconfig);
+}
+
+static DRIVER_ATTR(hdrconfig,  0664, hdrconfig_show_value, NULL);
+
+static struct driver_attribute *hdrconfig_attr_list[] = {
+    &driver_attr_hdrconfig,
+    &driver_attr_camera_otp,
+};
+
+static int hdrconfig_create_attr(struct device_driver *driver)
+{
+    int idx, err = 0;
+    int num = (int)(sizeof(hdrconfig_attr_list)/sizeof(hdrconfig_attr_list[0]));
+
+    for (idx = 0; idx < num; idx++) {
+        if ((err = driver_create_file(driver, hdrconfig_attr_list[idx]))) {
+            printk("driver_create_file (%s) = %d\n", hdrconfig_attr_list[idx]->attr.name, err);
+            break;
+        }
+    }
+
+    return err;
+}
+
+static int hdrconfig_delete_attr(struct device_driver *driver)
+{
+    int idx , err = 0;
+    int num = (int)(sizeof(hdrconfig_attr_list)/sizeof(hdrconfig_attr_list[0]));
+
+    if (!driver)
+        return -EINVAL;
+
+    for (idx = 0; idx < num; idx++)
+        driver_remove_file(driver, hdrconfig_attr_list[idx]);
+
+    return err;
+}
 static int __init imgsensor_init(void)
 {
 	PK_DBG("[camerahw_probe] start\n");
@@ -2481,13 +2777,29 @@ static int __init imgsensor_init(void)
 		return -ENODEV;
 	}
 
+#if  (__CUST_DUAL_CAMERA_USEDBY_YUV_MODE__ || __CUST_DUAL_SUB_CAMERA__)
+	if (yuvcamera_create_attr(&gimgsensor_platform_driver.driver))
+#endif
+
+	if (hdrconfig_create_attr(&gimgsensor_platform_driver.driver))
+		printk("hdrconfig_create_attr fail!\n");
+
 	return 0;
 }
 
 static void __exit imgsensor_exit(void)
 {
+	#if  (__CUST_DUAL_CAMERA_USEDBY_YUV_MODE__ || __CUST_DUAL_SUB_CAMERA__)
+		yuvcamera_delete_attr(&gimgsensor_platform_driver.driver);
+	#endif
+
+	hdrconfig_delete_attr(&gimgsensor_platform_driver.driver);
+
 	platform_driver_unregister(&gimgsensor_platform_driver);
 }
+
+
+
 #ifdef NEED_LATE_INITCALL
 	late_initcall(imgsensor_init);
 #else

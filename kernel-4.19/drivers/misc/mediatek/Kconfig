@@ -223,6 +223,12 @@ config MTK_DISP_PLATFORM
 	  for your selection. It's used for display
 	  driver only.
 
+config CUSTOM_KERNEL_CAM_CAL_DRV
+	string "Camera calibration driver"
+	help
+	  Kernel space camera calibration driver. Define  project used cam_cal
+	  driver .
+
 config MTK_SEC_VIDEO_PATH_SUPPORT
 	bool "Enable MTK Secure Video Path Support"
 	depends on MTK_IN_HOUSE_TEE_SUPPORT || TRUSTONIC_TEE_SUPPORT || \
@@ -276,6 +282,43 @@ config CUSTOM_KERNEL_IMGSENSOR
 	  sensors .The value is combination of CUSTOM_KERNEL_MAIN_IMGSENSOR,
 	  CUSTOM_KERNEL_MAIN_BACKUP_IMGSENSOR, CUSTOM_KERNEL_SUB_IMGSENSOR,
 	  and CUSTOM_KERNEL_SUB_BACKUP_IMGSENSOR
+
+	  
+config IMGSENSOR_MAIN
+	string "Custom main image sensor driver"
+	default "dummy"
+	help
+	  Kernel space image sensor driver. Define  project used all main image
+	  sensors .The value is CUSTOM_KERNEL_MAIN_IMGSENSOR
+
+config IMGSENSOR_SUB
+	string "Custom sub image sensor driver"
+	default "dummy"
+	help
+	  Kernel space image sensor driver. Define  project used all sub image
+	  sensors .The value is CUSTOM_KERNEL_SUB_IMGSENSOR
+
+config IMGSENSOR_MAIN2
+	string "Custom main2 image sensor driver"
+	default "dummy"
+	help
+	  Kernel space image sensor driver. Define  project used all main2 image
+	  sensors .The value is CUSTOM_KERNEL_MAIN2_IMGSENSOR
+
+config IMGSENSOR_SUB2
+	string "Custom sub2 image sensor driver"
+	default "dummy"
+	help
+	  Kernel space image sensor driver. Define  project used all sub2 image
+	  sensors .The value is CUSTOM_KERNEL_SUB2_IMGSENSOR
+
+config IMGSENSOR_MAIN3
+	string "Custom main3 image sensor driver"
+	default "dummy"
+	help
+	  Kernel space image sensor driver. Define  project used all main3 image
+	  sensors .The value is CUSTOM_KERNEL_MAIN3_IMGSENSOR
+	  	  
 
 config MTK_MT6382_BDG
 	bool "Support Bridge IC 6382"
@@ -559,6 +602,8 @@ endmenu # Debug
 menu "Misc"
 source "drivers/misc/mediatek/ext_gic/Kconfig"
 source "drivers/misc/mediatek/cirq/Kconfig"
+source "drivers/misc/mediatek/up_devices/Kconfig"
+source "drivers/misc/mediatek/fingerprint/Kconfig"
 source "drivers/misc/mediatek/timer/Kconfig"
 endmenu # Misc
 

@@ -123,7 +123,7 @@ struct mt63xx_accdet_data {
 };
 static struct mt63xx_accdet_data *accdet;
 
-static struct head_dts_data accdet_dts;
+struct head_dts_data accdet_dts;
 struct pwm_deb_settings *cust_pwm_deb;
 
 struct accdet_priv {

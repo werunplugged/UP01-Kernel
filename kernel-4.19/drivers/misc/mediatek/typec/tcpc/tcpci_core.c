@@ -51,6 +51,7 @@ static struct device_attribute tcpc_device_attributes[] = {
 	TCPC_DEVICE_ATTR(timer, 0664),
 	TCPC_DEVICE_ATTR(caps_info, 0444),
 	TCPC_DEVICE_ATTR(pe_ready, 0444),
+	TCPC_DEVICE_ATTR(cc_polarity, 0444),
 };
 
 enum {
@@ -61,6 +62,7 @@ enum {
 	TCPC_DESC_TIMER,
 	TCPC_DESC_CAP_INFO,
 	TCPC_DESC_PE_READY,
+	TCPC_DESC_CC_POLARITY,
 };
 
 static struct attribute *__tcpc_attrs[ARRAY_SIZE(tcpc_device_attributes) + 1];
@@ -226,6 +228,17 @@ static ssize_t tcpc_show_property(struct device *dev,
 		}
 		break;
 #endif
+	case TCPC_DESC_CC_POLARITY:
+		if (tcpc->typec_attach_old == TYPEC_UNATTACHED ||
+			   tcpc->typec_attach_new == TYPEC_UNATTACHED)
+		{
+			   snprintf(buf, 256, "%d\n", -1);
+			   break;
+		}       
+		ret = snprintf(buf, 256, "%d\n", tcpm_inquire_cc_polarity(tcpc));
+		if (ret < 0)
+			   break;
+		break;
 	default:
 		break;
 	}

@@ -1378,6 +1378,11 @@ struct SENSOR_FUNCTION_STRUCT {
 	void   *psensor_inst; /* IMGSENSOR_SENSOR_INST */
 };
 
+typedef struct {
+	MUINT32 (*SensorOpen)(void);
+	MUINT32 (*Sensorreadshutter)(void);
+	MUINT32 (*SensorGetID)(void);
+} SENSOR_FUNCTION_STRUCT_1;
 struct ACDK_KD_SENSOR_INIT_FUNCTION_STRUCT {
 	MUINT32 SensorId;
 	MUINT8 drvname[32];

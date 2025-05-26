@@ -16,6 +16,9 @@ enum charger_type {
 	APPLE_1_0A_CHARGER, /* 1A apple charger */
 	APPLE_0_5A_CHARGER, /* 0.5A apple charger */
 	WIRELESS_CHARGER,
+#ifdef CONFIG_WIRELESS_POWER_MT5728
+	REVERSE_CHARGER,
+#endif
 };
 #if defined(CONFIG_USB_MTK_HDRC) || defined(CONFIG_USB_MU3D_DRV) \
 	|| defined(CONFIG_EXTCON_MTK_USB)

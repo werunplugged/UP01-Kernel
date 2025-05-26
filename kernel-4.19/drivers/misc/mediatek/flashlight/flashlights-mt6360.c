@@ -348,7 +348,7 @@ static int mt6360_set_level(int channel, int level)
 	return 0;
 }
 
-static int mt6360_set_scenario(int scenario)
+int mt6360_set_scenario(int scenario)
 {
 	/* set decouple mode */
 	mt6360_decouple_mode = scenario & FLASHLIGHT_SCENARIO_DECOUPLE_MASK;

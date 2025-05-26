@@ -46,7 +46,9 @@
 #include "mtk_pbm.h" /* DLPT */
 #endif
 
-
+#ifdef CONFIG_MT6360_PMU_FLED
+int mt6360_set_scenario(int scenario);
+#endif
 /******************************************************************************
  * Definition
  *****************************************************************************/
@@ -1027,6 +1029,149 @@ unlock:
 	return ret;
 }
 static DEVICE_ATTR_RW(flashlight_strobe);
+static ssize_t flashlight_contrl_show(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	pr_debug("contrl show.\n");
+
+	return scnprintf(buf, PAGE_SIZE, "[TYPE] [CT] [PART] [LEVEL] [DURATION(ms)]\n");
+}
+static ssize_t flashlight_contrl_store(struct device *dev, struct device_attribute *attr,
+		const char *buf, size_t size)
+{
+	struct flashlight_arg fl_arg = {0};
+	struct flashlight_dev_arg fl_dev_arg;
+	struct flashlight_dev *fdev;
+	int ret;
+	int is_main_fl = 0; // fix bug: main(ch0), sub(ch1), when turn-on main, we should not call turn-off sub.
+	//or else in turn-off sub fuction, it will call ch0&ch1 set to off mode.
+	
+
+	//mt6370_set_scenario(2); // moved to bottom.
+
+	pr_debug("contrl store.\n");
+	if(!strncmp(buf, "on", 2))
+	{
+		pr_debug("contrl-main on. %s\n", buf);
+		fl_arg.level = 1;
+		is_main_fl = 1;
+		fl_arg.ct = 0;
+	}
+	else if(!strncmp(buf, "off", 3))
+	{
+		pr_debug("contrl-main off. %s\n", buf);
+		fl_arg.level = 0;
+		is_main_fl = 1;
+		fl_arg.ct = 0;
+	}
+	else if(!strncmp(buf, "subon", 5))
+	{
+		pr_debug("contrl-sub subon. %s\n", buf);
+		fl_arg.level = 1;
+		is_main_fl = 0;
+		fl_arg.ct = 0;
+	}
+	else if(!strncmp(buf, "suboff", 6))
+	{
+		pr_debug("contrl-sub suboff. %s\n", buf);
+		fl_arg.level = 0;
+		is_main_fl = 0;
+		fl_arg.ct = 0;
+	}
+	else if(!strncmp(buf, "hton", 4))
+	{
+		pr_debug("contrl-main high color temp on. %s\n", buf);
+		fl_arg.level = 1;
+		is_main_fl = 1;
+		fl_arg.ct = 0;
+	}
+	else if(!strncmp(buf, "htoff", 5))
+	{
+		pr_debug("contrl-main high color temp off. %s\n", buf);
+		fl_arg.level = 0;
+		is_main_fl = 1;		
+		fl_arg.ct = 0;
+	}
+	else if(!strncmp(buf, "lton", 4))
+	{
+		pr_debug("contrl-main low color temp on. %s\n", buf);
+		fl_arg.level = 1;
+		is_main_fl = 1;
+		fl_arg.ct = 1;
+	}
+	else if(!strncmp(buf, "ltoff", 5))
+	{
+		pr_debug("contrl-main low color temp off. %s\n", buf);
+		fl_arg.level = 0;
+		is_main_fl = 1;		
+		fl_arg.ct = 1;
+	}
+	else
+	{
+		pr_debug("contrl error: %s\n", buf);
+		is_main_fl = 0;
+		goto unlock;
+	}
+	if (is_main_fl)	
+		fl_arg.type = 0;	
+	else
+		fl_arg.type = 1;
+
+	fl_arg.part = 0;	fl_arg.dur = 0;
+	//fl_arg.ct = 0;	fl_arg.part = 0;	fl_arg.dur = 0;
+
+
+	pr_debug("flashlight_contrl_store. (%d, %d, %d), (%d, %d)\n", fl_arg.type, fl_arg.ct, fl_arg.part, fl_arg.level, fl_arg.dur);
+
+	/* call callback function */
+	mutex_lock(&fl_mutex);
+	fdev = flashlight_find_dev_by_full_index(
+			fl_arg.type, fl_arg.ct, fl_arg.part);
+	mutex_unlock(&fl_mutex);
+	if (!fdev) {
+		pr_info("Find no flashlight device\n");
+		ret = -1;
+		goto unlock;
+	}
+
+	/* call callback function */
+	fdev->ops->flashlight_strobe_store(fl_arg);
+
+	if(fl_arg.level > 0)
+	{
+			fdev->ops->flashlight_open();
+			fdev->ops->flashlight_set_driver(1);
+	}
+
+
+	// add to fix bug: we set decouple in flashlight-device.c, we should also set here, or else flashlight not work.
+#ifdef CONFIG_MT6360_PMU_FLED
+	mt6360_set_scenario(2); // moved after set_driver or else will be replaced.
+#endif
+
+	ret = fl_set_level(fdev, fl_arg.level);
+	fl_arg.channel = fdev->dev_id.channel;
+	fl_dev_arg.channel = fdev->dev_id.channel;
+	fl_dev_arg.arg = 0;
+	
+	fdev->ops->flashlight_ioctl(FLASH_IOC_SET_TIME_OUT_TIME_MS, (unsigned long)&fl_dev_arg);
+
+	ret = fl_enable(fdev, 1);
+
+	if(fl_arg.level <= 0)
+	{
+		fdev->ops->flashlight_set_driver(0);
+        ret = fl_enable(fdev, 0);
+		fdev->ops->flashlight_release();
+#ifdef CONFIG_MT6360_PMU_FLED
+	mt6360_set_scenario(0); // add
+#endif
+	}
+unlock:
+	ret = size;
+	return ret;
+}
+static DEVICE_ATTR_RW(flashlight_contrl);
 
 /* pt status sysfs */
 static ssize_t flashlight_pt_show(struct device *dev,
@@ -1670,6 +1815,10 @@ static int flashlight_probe(struct platform_device *dev)
 		pr_info("Failed to create device file(charger)\n");
 		goto err_create_charger_device_file;
 	}
+	if (device_create_file(flashlight_device, &dev_attr_flashlight_contrl)) {
+		pr_err("Failed to create device file(contrl)\n");
+		goto err_create_contrl_device_file;
+	}
 	if (device_create_file(flashlight_device,
 				&dev_attr_flashlight_capability)) {
 		pr_info("Failed to create device file(capability)\n");
@@ -1704,6 +1853,8 @@ err_create_fault_device_file:
 err_create_current_device_file:
 	device_remove_file(flashlight_device, &dev_attr_flashlight_capability);
 err_create_capability_device_file:
+	device_remove_file(flashlight_device, &dev_attr_flashlight_contrl);
+err_create_contrl_device_file:
 	device_remove_file(flashlight_device, &dev_attr_flashlight_charger);
 err_create_charger_device_file:
 	device_remove_file(flashlight_device, &dev_attr_flashlight_pt);
@@ -1734,6 +1885,7 @@ static int flashlight_remove(struct platform_device *dev)
 	device_remove_file(flashlight_device, &dev_attr_flashlight_charger);
 	device_remove_file(flashlight_device, &dev_attr_flashlight_pt);
 	device_remove_file(flashlight_device, &dev_attr_flashlight_strobe);
+	device_remove_file(flashlight_device, &dev_attr_flashlight_contrl);
 	/* remove device */
 	device_destroy(flashlight_class, flashlight_devno);
 	/* remove class */

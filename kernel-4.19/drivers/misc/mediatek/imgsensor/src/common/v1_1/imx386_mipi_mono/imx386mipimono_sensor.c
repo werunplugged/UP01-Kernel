@@ -2239,11 +2239,11 @@ static kal_uint32 get_info(enum MSDK_SCENARIO_ID_ENUM scenario_id,
 
 	sensor_info->SensorMIPILaneNumber = imgsensor_info.mipi_lane_num;
 	sensor_info->SensorClockFreq = imgsensor_info.mclk;
-	sensor_info->SensorClockDividCount = 3; /* not use */
+	sensor_info->SensorClockDividCount = 3; /* Not used */
 	sensor_info->SensorClockRisingCount = 0;
-	sensor_info->SensorClockFallingCount = 2; /* not use */
-	sensor_info->SensorPixelClockCount = 3; /* not use */
-	sensor_info->SensorDataLatchCount = 2; /* not use */
+	sensor_info->SensorClockFallingCount = 2; /* Not used */
+	sensor_info->SensorPixelClockCount = 3; /* Not used */
+	sensor_info->SensorDataLatchCount = 2; /* Not used */
 
 	sensor_info->MIPIDataLowPwr2HighSpeedTermDelayCount = 0;
 	sensor_info->MIPICLKLowPwr2HighSpeedTermDelayCount = 0;

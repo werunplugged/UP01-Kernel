@@ -3815,9 +3815,9 @@ static kal_uint32 get_info(enum MSDK_SCENARIO_ID_ENUM scenario_id,
 	sensor_info->SensorClockFallingPolarity = SENSOR_CLOCK_POLARITY_LOW;
 	sensor_info->SensorHsyncPolarity = SENSOR_CLOCK_POLARITY_LOW;
 	sensor_info->SensorVsyncPolarity = SENSOR_CLOCK_POLARITY_LOW;
-	sensor_info->SensorInterruptDelayLines = 4; /* not use */
-	sensor_info->SensorResetActiveHigh = FALSE; /* not use */
-	sensor_info->SensorResetDelayCount = 5; /* not use */
+	sensor_info->SensorInterruptDelayLines = 4; /* Not used */
+	sensor_info->SensorResetActiveHigh = FALSE; /* Not used */
+	sensor_info->SensorResetDelayCount = 5; /* Not used */
 
 	sensor_info->SensroInterfaceType = imgsensor_info.sensor_interface_type;
 	sensor_info->MIPIsensorType = imgsensor_info.mipi_sensor_type;
@@ -3837,7 +3837,7 @@ static kal_uint32 get_info(enum MSDK_SCENARIO_ID_ENUM scenario_id,
 	sensor_info->Custom3DelayFrame = imgsensor_info.custom3_delay_frame;
 	sensor_info->Custom4DelayFrame = imgsensor_info.custom4_delay_frame;
 
-	sensor_info->SensorMasterClockSwitch = 0; /* not use */
+	sensor_info->SensorMasterClockSwitch = 0; /* Not used */
 	sensor_info->SensorDrivingCurrent = imgsensor_info.isp_driving_current;
 
 	sensor_info->AEShutDelayFrame = imgsensor_info.ae_shut_delay_frame;
@@ -3852,11 +3852,11 @@ static kal_uint32 get_info(enum MSDK_SCENARIO_ID_ENUM scenario_id,
 	sensor_info->SensorMIPILaneNumber = imgsensor_info.mipi_lane_num;
 	sensor_info->TEMPERATURE_SUPPORT = imgsensor_info.temperature_support;
 	sensor_info->SensorClockFreq = imgsensor_info.mclk;
-	sensor_info->SensorClockDividCount = 3; /* not use */
+	sensor_info->SensorClockDividCount = 3; /* Not used */
 	sensor_info->SensorClockRisingCount = 0;
-	sensor_info->SensorClockFallingCount = 2; /* not use */
-	sensor_info->SensorPixelClockCount = 3; /* not use */
-	sensor_info->SensorDataLatchCount = 2; /* not use */
+	sensor_info->SensorClockFallingCount = 2; /* Not used */
+	sensor_info->SensorPixelClockCount = 3; /* Not used */
+	sensor_info->SensorDataLatchCount = 2; /* Not used */
 
 	sensor_info->MIPIDataLowPwr2HighSpeedTermDelayCount = 0;
 	sensor_info->MIPICLKLowPwr2HighSpeedTermDelayCount = 0;

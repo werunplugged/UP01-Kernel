@@ -197,6 +197,8 @@ obj-$(CONFIG_MTK_DFD_INTERNAL_DUMP) += dfd/
 obj-$(CONFIG_MTK_GIC_EXT) += ext_gic/
 obj-$(CONFIG_MTK_SYS_CIRQ) += cirq/
 obj-$(CONFIG_MTK_SECURITY_SW_SUPPORT) += masp/
+obj-$(CONFIG_CUST_DEVICE_INFO_SUPPORT) +=up_devices/
+obj-$(CONFIG_CUST_FINGERPRINT_SUPPORT)  += fingerprint/
 obj-y += rps/
 ifeq ($(CONFIG_MACH_MT6768),y)
 obj-y += spi_slave_drv/
@@ -208,3 +210,4 @@ obj-$(CONFIG_MTK_GATE_IC) += gate_ic/
 obj-$(CONFIG_MTK_FREQ_HOPPING) += freqhopping/
 obj-$(CONFIG_MTK_TASK_TURBO) += task_turbo/
 obj-$(CONFIG_AW862xx_HAPTIC) += aw862xx_haptic/
+

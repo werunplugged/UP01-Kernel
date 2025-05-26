@@ -1,6 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2015-2019 TrustKernel Incorporated
+ * All Rights Reserved.
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #include <linux/module.h>
@@ -15,7 +25,12 @@
 #include <linux/fs.h>
 #include <linux/file.h>
 #include <linux/uaccess.h>
+
+#include <linux/arm-smccc.h>
+#include <linux/soc/mediatek/mtk_sip_svc.h>
+
 #include <asm-generic/ioctl.h>
+
 #include <linux/sched.h>
 #include <linux/version.h>
 
@@ -27,13 +42,9 @@
 #include "tee_sysfs.h"
 #include "tee_shm.h"
 #include "tee_supp_com.h"
-#include "tee_tui.h"
 
 #include "tee_ta_mgmt.h"
 #include "tee_procfs.h"
-
-#include "tee_fp_priv.h"
-#include "tee_clkmgr_priv.h"
 
 #include "pm.h"
 
@@ -253,8 +264,11 @@ static int tee_ctx_open(struct inode *inode, struct file *filp)
 
 	tee = container_of(filp->private_data, struct tee, miscdev);
 
-	WARN_ON(!tee);
-	WARN_ON(tee->miscdev.minor != iminor(inode));
+	if (WARN_ON(!tee))
+		return -1;
+
+	if (WARN_ON(tee->miscdev.minor != iminor(inode)))
+		return -1;
 
 	ret = tee_supp_open(tee);
 	if (ret)
@@ -297,7 +311,6 @@ static int tee_do_create_session(struct tee_context *ctx,
 
 	tee = ctx->tee;
 	WARN_ON(!ctx->usr_client);
-
 
 	if (copy_from_user(&k_cmd, (void *)u_cmd, sizeof(struct tee_cmd_io))) {
 		pr_err("create_session: copy_from_user failed\n");
@@ -393,6 +406,70 @@ exit:
 	return ret;
 }
 
+#define MT67XX_RNG_MAGIC	0x74726e67
+
+static void smc_read_trng(uint32_t *val)
+{
+	struct arm_smccc_res res;
+
+	arm_smccc_smc(MTK_SIP_KERNEL_GET_RND,
+			MT67XX_RNG_MAGIC, 0, 0, 0, 0, 0, 0, &res);
+
+	val[0] = res.a0;
+	val[1] = res.a1;
+	val[2] = res.a2;
+	val[3] = res.a3;
+}
+
+#define RDRAND_LEN	256
+
+static int tee_generate_hw_random(struct tee_context *ctx,
+				struct tee_gen_hw_rand_io __user *uarg)
+{
+	int ret = -EINVAL;
+
+	size_t len;
+	uint8_t *buf = NULL, *p;
+	struct tee_gen_hw_rand_io arg;
+
+	if (copy_from_user(&arg,
+				(void *) uarg, sizeof(arg)))
+		return -EFAULT;
+
+	if (arg.length > RDRAND_LEN)
+		return -EINVAL;
+
+	p = buf = kmalloc(RDRAND_LEN, GFP_KERNEL);
+	if (buf == NULL)
+		return -ENOMEM;
+
+	len = arg.length;
+
+	while (p - buf != len) {
+		uint32_t tmp[4] = { };
+		size_t readlen = len - (p - buf);
+
+		if (readlen > sizeof(tmp))
+			readlen = sizeof(tmp);
+
+		smc_read_trng(tmp);
+		memcpy(p, tmp, readlen);
+		p += readlen;
+	}
+
+	if (copy_to_user(arg.data, buf, len)) {
+		ret = -EFAULT;
+		goto out;
+	}
+
+	ret = 0;
+out:
+	if (buf)
+		kfree(buf);
+
+	return ret;
+}
+
 static int tee_do_get_fd_for_rpc_shm(struct tee_context *ctx,
 	struct tee_shm_io __user *u_shm)
 {
@@ -439,29 +516,6 @@ exit:
 	return ret;
 }
 
-static int tee_tui_notify(uint32_t arg)
-{
-	if (teec_notify_event(arg))
-		return 0;
-
-	return -EINVAL;
-}
-
-static int tee_tui_wait(uint32_t __user *u_arg)
-{
-	int r;
-	uint32_t cmd_id;
-
-	r = teec_wait_cmd(&cmd_id);
-	if (r)
-		return r;
-
-	if (copy_to_user(u_arg, &cmd_id, sizeof(cmd_id)))
-		return -EFAULT;
-
-	return 0;
-}
-
 static long tee_internal_ioctl(struct tee_context *ctx,
 				unsigned int cmd,
 				void __user *u_arg)
@@ -489,16 +543,6 @@ static long tee_internal_ioctl(struct tee_context *ctx,
 			(struct tee_shm_io __user *) u_arg);
 		break;
 
-	case TEE_TUI_NOTIFY_IOC:
-		ret = tee_tui_notify(
-			(uint32_t) (unsigned long) u_arg);
-		break;
-
-	case TEE_TUI_WAITCMD_IOC:
-		ret = tee_tui_wait(
-			(uint32_t __user *) u_arg);
-		break;
-
 	case TEE_INSTALL_TA_IOC:
 		ret = tee_install_sp_ta(ctx, u_arg);
 		break;
@@ -514,8 +558,6 @@ static long tee_internal_ioctl(struct tee_context *ctx,
 
 	case TEE_QUERY_DRV_FEATURE_IOC:
 		if (u_arg) {
-			pr_info("tkcoredrv: nsdrv feature = 0x%x\n",
-					nsdrv_feature_flags);
 			if (copy_to_user(u_arg, &nsdrv_feature_flags,
 					sizeof(nsdrv_feature_flags))) {
 				ret = -EFAULT;
@@ -525,6 +567,10 @@ static long tee_internal_ioctl(struct tee_context *ctx,
 		} else
 			ret = -EINVAL;
 
+		break;
+
+	case TEE_GENERATE_HW_RANDOM_IOC:
+		ret = tee_generate_hw_random(ctx, u_arg);
 		break;
 
 	default:
@@ -822,7 +868,6 @@ struct tee *tee_core_alloc(struct device *dev, char *name, int id,
 
 	tee->state = TEE_OFFLINE;
 	tee->shm_flags = TEEC_MEM_INPUT | TEEC_MEM_OUTPUT | TEEC_MEM_NONSECURE;
-	tee->test = 0;
 
 	if ((tee_supp_init(tee))) {
 		devm_kfree(dev, tee);
@@ -917,9 +962,6 @@ static int __init tee_core_init(void)
 {
 	int r;
 
-	pr_info("\nTEE Core Framework initialization (ver %s)\n",
-		_TEE_CORE_FW_VER);
-
 	r = tkcore_tee_pm_init();
 	if (r) {
 		pr_err("tkcore_tee_pm_init() failed with %d\n", r);
@@ -929,8 +971,6 @@ static int __init tee_core_init(void)
 	spin_lock_init(&tee_idr_lock);
 	idr_init(&tee_idr);
 
-	tee_fp_init();
-	tee_clkmgr_init();
 	tee_ta_mgmt_init();
 
 	return 0;
@@ -938,12 +978,11 @@ static int __init tee_core_init(void)
 
 static void __exit tee_core_exit(void)
 {
-	pr_info("TEE Core Framework unregistered\n");
-
 	tkcore_tee_pm_exit();
 
+#if defined(CONFIG_TRUSTKERNEL_TEE_FP_SUPPORT)
 	tee_clkmgr_exit();
-	tee_fp_exit();
+#endif
 }
 
 #ifndef MODULE

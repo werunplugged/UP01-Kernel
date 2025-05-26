@@ -47,6 +47,24 @@ struct rpmb_infor {
 };
 #endif /* CONFIG_MICROTRUST_TEE_SUPPORT */
 
+#if defined(CONFIG_TRUSTKERNEL_TEE_RPMB_SUPPORT)
+
+#define RPMB_DATA_FRAME_SIZE    512u
+#define RPMB_DATA_BUFFER_SIZE   (RPMB_DATA_FRAME_SIZE * 8)
+
+#define RPMB_IOCTL_TKCORE_WRITE_DATA    10
+#define RPMB_IOCTL_TKCORE_READ_DATA     11
+#define RPMB_IOCTL_TKCORE_GET_CNT       12
+#define RPMB_IOCTL_TKCORE_GET_WR_SIZE   13
+
+struct rpmb_request {
+    unsigned int nr;
+    unsigned int rel_wr_sec_c;
+    unsigned char *data_frame;
+};
+
+#endif
+
 struct rpmb_ioc_param {
 	unsigned char *key;
 	unsigned char *data;

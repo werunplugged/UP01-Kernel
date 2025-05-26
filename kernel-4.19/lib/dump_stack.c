@@ -13,7 +13,7 @@
 #include <linux/kexec.h>
 #include <linux/utsname.h>
 
-static char dump_stack_arch_desc_str[128];
+char dump_stack_arch_desc_str[128];
 
 /**
  * dump_stack_set_arch_desc - set arch-specific str to show with task dumps

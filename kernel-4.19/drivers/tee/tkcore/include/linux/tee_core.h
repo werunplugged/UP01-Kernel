@@ -1,6 +1,16 @@
 /* SPDX-License-Identifier: GPL-2.0
  *
  * Copyright (c) 2015-2019 TrustKernel Incorporated
+ * All Rights Reserved.
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #ifndef __TEE_CORE_DRV_H__
@@ -46,11 +56,27 @@ struct tee_stats_entry {
 #define TEE_STATS_SESSION_IDX	1
 #define TEE_STATS_SHM_IDX		2
 
+struct tee_version {
+	uint32_t maj;
+	uint32_t mid;
+	uint32_t min;
+};
+
+struct tee_log {
+	void *buffer;
+	size_t length;
+	int irq;
+};
+
 #define TEE_MAX_TEE_DEV_NAME (64)
 struct tee {
 	struct klist_node node;
 	char name[TEE_MAX_TEE_DEV_NAME];
 	int id;
+
+	struct tee_version version;
+	struct tee_log log;
+
 	void *priv;
 	const struct tee_ops *ops;
 	struct device *dev;
@@ -60,13 +86,14 @@ struct tee {
 	atomic_t refcount;
 	int max_refcount;
 	struct tee_stats_entry stats[3];
+
 	struct list_head list_ctx;
 	struct list_head list_rpc_shm;
 	struct mutex lock;
+
 	unsigned int state;
 	uint32_t shm_flags;	/* supported flags for shm allocation */
 	uint32_t conf;
-	uint32_t test;
 };
 
 #define _DEV(tee) (tee->miscdev.this_device)
@@ -222,9 +249,7 @@ struct tee_ops {
 				  uint32_t flags);
 	void (*free)(struct tee_shm *shm);
 	int (*shm_inc_ref)(struct tee_shm *shm);
-
 	void (*call_tee)(struct smc_param *p);
-	void (*raw_call_tee)(struct smc_param *p);
 };
 
 

@@ -205,6 +205,7 @@ static __poll_t rtc_dev_poll(struct file *file, poll_table *wait)
 
 	return (data != 0) ? (EPOLLIN | EPOLLRDNORM) : 0;
 }
+extern char dump_stack_arch_desc_str[128];
 
 static long rtc_dev_ioctl(struct file *file,
 		unsigned int cmd, unsigned long arg)
@@ -215,7 +216,7 @@ static long rtc_dev_ioctl(struct file *file,
 	struct rtc_time tm;
 	struct rtc_wkalrm alarm;
 	void __user *uarg = (void __user *) arg;
-
+    struct up_bbchip up_bbchip_name;
 	err = mutex_lock_interruptible(&rtc->ops_lock);
 	if (err)
 		return err;
@@ -320,7 +321,12 @@ static long rtc_dev_ioctl(struct file *file,
 		}
 
 		return rtc_set_alarm(rtc, &alarm);
-
+    case RTC_UP_GET_BBCHIP:
+               mutex_unlock(&rtc->ops_lock);
+               memcpy(up_bbchip_name.bbchip_name, dump_stack_arch_desc_str, sizeof(dump_stack_arch_desc_str)); 
+               if (copy_to_user(uarg, &up_bbchip_name, sizeof(up_bbchip_name)))
+                       err = -EFAULT;
+               return err;
 	case RTC_RD_TIME:
 		mutex_unlock(&rtc->ops_lock);
 

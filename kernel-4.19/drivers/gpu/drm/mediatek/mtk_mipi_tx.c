@@ -927,6 +927,9 @@ static int mtk_mipi_tx_pll_prepare_mt6885(struct clk_hw *hw)
 	/* TODO: should write bit8 to set SW_ANA_CK_EN here */
 	mtk_mipi_tx_set_bits(mipi_tx, MIPITX_SW_CTRL_CON4, 1);
 
+	mtk_mipi_tx_update_bits(mipi_tx, MIPITX_VOLTAGE_SEL,
+		FLD_RG_DSI_HSTX_LDO_REF_SEL, 0xF << 6);		
+
 	DDPDBG("%s-\n", __func__);
 
 	return 0;

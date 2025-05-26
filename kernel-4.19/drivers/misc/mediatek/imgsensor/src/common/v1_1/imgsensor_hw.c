@@ -21,11 +21,14 @@ char * const imgsensor_hw_pin_names[] = {
 #ifdef CONFIG_REGULATOR_RT5133
 	"vcama1",
 #endif
-#if defined(IMGSENSOR_MT6781) || defined(IMGSENSOR_MT6877)
+#if 0 // defined(IMGSENSOR_MT6781) || defined(IMGSENSOR_MT6877)
 	"vcamaf",
 #endif
 	"vcamd",
 	"vcamio",
+	"vcamaf",
+	"vcama2",
+	"vcamd2",
 #ifdef MIPI_SWITCH
 	"mipi_switch_en",
 	"mipi_switch_sel",
@@ -154,7 +157,175 @@ enum IMGSENSOR_RETURN imgsensor_hw_release_all(struct IMGSENSOR_HW *phw)
 	return IMGSENSOR_RETURN_SUCCESS;
 }
 
+#ifdef CONFIG_LDO_WL2864C
+extern int wl2864c_vin2_power(int power);
+#endif
+
 static enum IMGSENSOR_RETURN imgsensor_hw_power_sequence(
+		struct IMGSENSOR_HW             *phw,
+		enum   IMGSENSOR_SENSOR_IDX      sensor_idx,
+		enum   IMGSENSOR_HW_POWER_STATUS pwr_status,
+		struct IMGSENSOR_HW_POWER_SEQ   *ppower_sequence,
+		char *pcurr_idx)
+{
+	struct IMGSENSOR_HW_SENSOR_POWER *psensor_pwr =
+					&phw->sensor_pwr[sensor_idx];
+	struct IMGSENSOR_HW_POWER_SEQ    *ppwr_seq = ppower_sequence;
+	struct IMGSENSOR_HW_POWER_INFO   *ppwr_info;
+	struct IMGSENSOR_HW_DEVICE       *pdev;
+	int                               pin_cnt = 0;
+
+#ifdef CONFIG_FPGA_EARLY_PORTING  /*for FPGA*/
+	if (1) {
+		PK_DBG("FPGA return true for power control\n");
+		return IMGSENSOR_RETURN_SUCCESS;
+	}
+#endif
+
+	while (ppwr_seq < ppower_sequence + IMGSENSOR_HW_SENSOR_MAX_NUM &&
+		ppwr_seq->name != NULL) {
+		if (!strcmp(ppwr_seq->name, PLATFORM_POWER_SEQ_NAME)) {
+			if (sensor_idx == ppwr_seq->_idx)
+				break;
+		} else {
+			if (!strcmp(ppwr_seq->name, pcurr_idx))
+				break;
+		}
+		ppwr_seq++;
+	}
+
+	if (ppwr_seq->name == NULL)
+		return IMGSENSOR_RETURN_ERROR;
+
+	ppwr_info = ppwr_seq->pwr_info;
+#ifdef CONFIG_LDO_WL2864C
+    if (pwr_status == IMGSENSOR_HW_POWER_STATUS_ON) {
+            wl2864c_vin2_power(1);
+    }
+#endif
+	while (ppwr_info->pin != IMGSENSOR_HW_PIN_NONE &&
+	       ppwr_info->pin < IMGSENSOR_HW_PIN_MAX_NUM &&
+	       ppwr_info < ppwr_seq->pwr_info + IMGSENSOR_HW_POWER_INFO_MAX) {
+
+		if (pwr_status == IMGSENSOR_HW_POWER_STATUS_ON) {
+			if (ppwr_info->pin != IMGSENSOR_HW_PIN_UNDEF) {
+				pdev =
+				phw->pdev[psensor_pwr->id[ppwr_info->pin]];
+
+				//if (__ratelimit(&ratelimit))
+					printk(
+					"sensor_idx %d, ppwr_info->pin %d, ppwr_info->pin_state_on %d, delay %u",
+					sensor_idx,
+					ppwr_info->pin,
+					ppwr_info->pin_state_on,
+					ppwr_info->pin_on_delay);
+
+				if (pdev->set != NULL)
+					pdev->set(pdev->pinstance,
+					sensor_idx,
+				    ppwr_info->pin, ppwr_info->pin_state_on);
+			}
+
+			mdelay(ppwr_info->pin_on_delay);
+		}
+
+		ppwr_info++;
+		pin_cnt++;
+	}
+
+	if (pwr_status == IMGSENSOR_HW_POWER_STATUS_OFF) {
+		while (pin_cnt) {
+			ppwr_info--;
+			pin_cnt--;
+
+			//if (__ratelimit(&ratelimit))
+				printk(
+				"sensor_idx %d, ppwr_info->pin %d, ppwr_info->pin_state_off %d, delay %u",
+				sensor_idx,
+				ppwr_info->pin,
+				ppwr_info->pin_state_off,
+				ppwr_info->pin_on_delay);
+
+			if (ppwr_info->pin != IMGSENSOR_HW_PIN_UNDEF) {
+				pdev =
+				phw->pdev[psensor_pwr->id[ppwr_info->pin]];
+
+				if (pdev->set != NULL)
+					pdev->set(pdev->pinstance,
+					sensor_idx,
+				ppwr_info->pin, ppwr_info->pin_state_off);
+			}
+
+			mdelay(ppwr_info->pin_on_delay);
+		}
+#ifdef CONFIG_LDO_WL2864C
+		wl2864c_vin2_power(0);
+#endif
+	}
+
+	return IMGSENSOR_RETURN_SUCCESS;
+}
+
+int up_sensor_idx;
+
+enum IMGSENSOR_RETURN imgsensor_hw_power(
+		struct IMGSENSOR_HW *phw,
+		struct IMGSENSOR_SENSOR *psensor,
+		enum IMGSENSOR_HW_POWER_STATUS pwr_status)
+{
+	int ret = 0;
+	enum IMGSENSOR_SENSOR_IDX sensor_idx = psensor->inst.sensor_idx;
+	char *curr_sensor_name = psensor->inst.psensor_list->name;
+	char str_index[LENGTH_FOR_SNPRINTF];
+
+	printk("sensor_idx %d, power %d curr_sensor_name %s, enable list %s\n",
+		sensor_idx,
+		pwr_status,
+		curr_sensor_name,
+		phw->enable_sensor_by_index[(uint32_t)sensor_idx] == NULL
+		? "NULL"
+		: phw->enable_sensor_by_index[(uint32_t)sensor_idx]);
+
+	up_sensor_idx = sensor_idx;
+	if (phw->enable_sensor_by_index[(uint32_t)sensor_idx] &&
+	!strstr(phw->enable_sensor_by_index[(uint32_t)sensor_idx], curr_sensor_name))
+		return IMGSENSOR_RETURN_ERROR;
+
+	ret = snprintf(str_index, sizeof(str_index), "%d", sensor_idx);
+	if (ret < 0) {
+		pr_info("Error! snprintf allocate 0");
+		ret = IMGSENSOR_RETURN_ERROR;
+		return ret;
+	}
+	imgsensor_hw_power_sequence(
+			phw,
+			sensor_idx,
+			pwr_status,
+			platform_power_sequence,
+			str_index);
+
+	imgsensor_hw_power_sequence(
+			phw,
+			sensor_idx,
+			pwr_status, sensor_power_sequence, curr_sensor_name);
+
+	return IMGSENSOR_RETURN_SUCCESS;
+}
+
+enum IMGSENSOR_RETURN imgsensor_hw_dump(struct IMGSENSOR_HW *phw)
+{
+	int i;
+
+	for (i = 0; i < IMGSENSOR_HW_ID_MAX_NUM; i++) {
+		if (phw->pdev[i]->dump != NULL)
+			(phw->pdev[i]->dump)(phw->pdev[i]->pinstance);
+	}
+	return IMGSENSOR_RETURN_SUCCESS;
+}
+
+
+#if (__CUST_DUAL_CAMERA_USEDBY_YUV_MODE__ || __CUST_DUAL_SUB_CAMERA__)
+enum IMGSENSOR_RETURN gc0310_imgsensor_hw_power_sequence(
 		struct IMGSENSOR_HW             *phw,
 		enum   IMGSENSOR_SENSOR_IDX      sensor_idx,
 		enum   IMGSENSOR_HW_POWER_STATUS pwr_status,
@@ -195,7 +366,6 @@ static enum IMGSENSOR_RETURN imgsensor_hw_power_sequence(
 	ppwr_info = ppwr_seq->pwr_info;
 
 	while (ppwr_info->pin != IMGSENSOR_HW_PIN_NONE &&
-	       ppwr_info->pin < IMGSENSOR_HW_PIN_MAX_NUM &&
 	       ppwr_info < ppwr_seq->pwr_info + IMGSENSOR_HW_POWER_INFO_MAX) {
 
 		if (pwr_status == IMGSENSOR_HW_POWER_STATUS_ON) {
@@ -204,12 +374,11 @@ static enum IMGSENSOR_RETURN imgsensor_hw_power_sequence(
 				phw->pdev[psensor_pwr->id[ppwr_info->pin]];
 
 				if (__ratelimit(&ratelimit))
-					PK_DBG(
-					"sensor_idx %d, ppwr_info->pin %d, ppwr_info->pin_state_on %d, delay %u",
+					printk(
+					"sensor_idx %d, ppwr_info->pin %d, ppwr_info->pin_state_on %d, hw_mode %d, sensor_name(%s) !\n",
 					sensor_idx,
 					ppwr_info->pin,
-					ppwr_info->pin_state_on,
-					ppwr_info->pin_on_delay);
+					ppwr_info->pin_state_on, psensor_pwr->id[ppwr_info->pin], pcurr_idx);
 
 				if (pdev->set != NULL)
 					pdev->set(pdev->pinstance,
@@ -231,11 +400,10 @@ static enum IMGSENSOR_RETURN imgsensor_hw_power_sequence(
 
 			if (__ratelimit(&ratelimit))
 				PK_DBG(
-				"sensor_idx %d, ppwr_info->pin %d, ppwr_info->pin_state_off %d, delay %u",
+				"sensor_idx %d, ppwr_info->pin %d, ppwr_info->pin_state_off %d",
 				sensor_idx,
 				ppwr_info->pin,
-				ppwr_info->pin_state_off,
-				ppwr_info->pin_on_delay);
+				ppwr_info->pin_state_off);
 
 			if (ppwr_info->pin != IMGSENSOR_HW_PIN_UNDEF) {
 				pdev =
@@ -253,58 +421,4 @@ static enum IMGSENSOR_RETURN imgsensor_hw_power_sequence(
 
 	return IMGSENSOR_RETURN_SUCCESS;
 }
-
-enum IMGSENSOR_RETURN imgsensor_hw_power(
-		struct IMGSENSOR_HW *phw,
-		struct IMGSENSOR_SENSOR *psensor,
-		enum IMGSENSOR_HW_POWER_STATUS pwr_status)
-{
-	int ret = 0;
-	enum IMGSENSOR_SENSOR_IDX sensor_idx = psensor->inst.sensor_idx;
-	char *curr_sensor_name = psensor->inst.psensor_list->name;
-	char str_index[LENGTH_FOR_SNPRINTF];
-
-	PK_DBG("sensor_idx %d, power %d curr_sensor_name %s, enable list %s\n",
-		sensor_idx,
-		pwr_status,
-		curr_sensor_name,
-		phw->enable_sensor_by_index[(uint32_t)sensor_idx] == NULL
-		? "NULL"
-		: phw->enable_sensor_by_index[(uint32_t)sensor_idx]);
-
-	if (phw->enable_sensor_by_index[(uint32_t)sensor_idx] &&
-	!strstr(phw->enable_sensor_by_index[(uint32_t)sensor_idx], curr_sensor_name))
-		return IMGSENSOR_RETURN_ERROR;
-
-	ret = snprintf(str_index, sizeof(str_index), "%d", sensor_idx);
-	if (ret < 0) {
-		pr_info("Error! snprintf allocate 0");
-		ret = IMGSENSOR_RETURN_ERROR;
-		return ret;
-	}
-	imgsensor_hw_power_sequence(
-			phw,
-			sensor_idx,
-			pwr_status,
-			platform_power_sequence,
-			str_index);
-
-	imgsensor_hw_power_sequence(
-			phw,
-			sensor_idx,
-			pwr_status, sensor_power_sequence, curr_sensor_name);
-
-	return IMGSENSOR_RETURN_SUCCESS;
-}
-
-enum IMGSENSOR_RETURN imgsensor_hw_dump(struct IMGSENSOR_HW *phw)
-{
-	int i;
-
-	for (i = 0; i < IMGSENSOR_HW_ID_MAX_NUM; i++) {
-		if (phw->pdev[i]->dump != NULL)
-			(phw->pdev[i]->dump)(phw->pdev[i]->pinstance);
-	}
-	return IMGSENSOR_RETURN_SUCCESS;
-}
-
+#endif

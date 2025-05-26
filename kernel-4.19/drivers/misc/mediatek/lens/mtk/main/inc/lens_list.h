@@ -143,6 +143,20 @@ extern int FP5510E2AF_Release(struct inode *a_pstInode,
 	struct file *a_pstFile);
 extern int FP5510E2AF_GetFileName(unsigned char *pFileName);
 
+#ifdef CONFIG_MTK_LENS_DW9800AF_SUPPORT
+#define DW9800AF_SetI2Cclient DW9800AF_SetI2Cclient_Main
+#define DW9800AF_Ioctl DW9800AF_Ioctl_Main
+#define DW9800AF_Release DW9800AF_Release_Main
+#define DW9800AF_GetFileName DW9800AF_GetFileName_Main
+extern int DW9800AF_SetI2Cclient(struct i2c_client *pstAF_I2Cclient,
+				 spinlock_t *pAF_SpinLock, int *pAF_Opened);
+extern long DW9800AF_Ioctl(struct file *a_pstFile, unsigned int a_u4Command,
+			   unsigned long a_u4Param);
+extern int DW9800AF_Release(struct inode *a_pstInode, struct file *a_pstFile);
+extern int DW9800AF_GetFileName(unsigned char *pFileName);
+#endif
+
+
 #define DW9814AF_SetI2Cclient DW9814AF_SetI2Cclient_Main
 #define DW9814AF_Ioctl DW9814AF_Ioctl_Main
 #define DW9814AF_Release DW9814AF_Release_Main
@@ -397,4 +411,16 @@ extern int GT9772AF_Release(struct inode *a_pstInode, struct file *a_pstFile);
 extern int GT9772AF_PowerDown(struct i2c_client *pstAF_I2Cclient,
 				int *pAF_Opened);
 extern int GT9772AF_GetFileName(unsigned char *pFileName);
+#endif
+#ifdef CONFIG_MTK_LENS_AW8601AF_SUPPORT
+#define AW8601AF_SetI2Cclient AW8601AF_SetI2Cclient_Main
+#define AW8601AF_Ioctl AW8601AF_Ioctl_Main
+#define AW8601AF_Release AW8601AF_Release_Main
+#define AW8601AF_GetFileName AW8601AF_GetFileName_Main
+extern int AW8601AF_SetI2Cclient(struct i2c_client *pstAF_I2Cclient,
+				 spinlock_t *pAF_SpinLock, int *pAF_Opened);
+extern long AW8601AF_Ioctl(struct file *a_pstFile, unsigned int a_u4Command,
+			   unsigned long a_u4Param);
+extern int AW8601AF_Release(struct inode *a_pstInode, struct file *a_pstFile);
+extern int AW8601AF_GetFileName(unsigned char *pFileName);
 #endif

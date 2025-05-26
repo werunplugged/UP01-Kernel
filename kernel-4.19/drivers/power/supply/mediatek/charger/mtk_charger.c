@@ -62,11 +62,11 @@
 #include <mt-plat/mtk_boot.h>
 #include <pmic.h>
 #include <mtk_gauge_time_service.h>
-
+#include <linux/cust_include/cust_project_all_config.h>
 #include "mtk_charger_intf.h"
 #include "mtk_charger_init.h"
 
-static struct charger_manager *pinfo;
+struct charger_manager *pinfo;
 static struct list_head consumer_head = LIST_HEAD_INIT(consumer_head);
 static DEFINE_MUTEX(consumer_mutex);
 static DEFINE_MUTEX(pid_lock);
@@ -80,7 +80,8 @@ struct tag_bootmode {
 
 bool mtk_is_TA_support_pd_pps(struct charger_manager *pinfo)
 {
-	if (pinfo->enable_pe_4 == false && pinfo->enable_pe_5 == false)
+	if (pinfo->enable_pe_4 == false
+		&& pinfo->enable_pe_5 == false && pinfo->enable_hvdv2 == false)
 		return false;
 
 	if (pinfo->pd_type == MTK_PD_CONNECT_PE_READY_SNK_APDO)
@@ -405,6 +406,12 @@ static int _charger_manager_enable_charging(struct charger_consumer *consumer,
 			pdata = &info->chg1_data;
 		else if (idx == SLAVE_CHARGER)
 			pdata = &info->chg2_data;
+		else if (idx == MAIN_DIVIDER_CHARGER)
+			pdata = &info->dvchg1_data;
+		else if (idx == SLAVE_DIVIDER_CHARGER)
+			pdata = &info->dvchg2_data;
+		else if (idx == MAIN_HV_DIVIDER_CHARGER)
+			pdata = &info->hv_dvchg1_data;
 		else
 			return -ENOTSUPP;
 
@@ -484,6 +491,33 @@ int charger_manager_set_charging_current_limit(
 {
 	struct charger_manager *info = consumer->cm;
 
+#ifdef 		__CUST_POWER_OFF_CHARGING_CLOSE_THERMAL__
+	#if 	__CUST_POWER_OFF_CHARGING_CLOSE_THERMAL__
+	struct device *dev = NULL;
+	struct device_node *boot_node = NULL;
+	struct tag_bootmode *tag = NULL;
+	int boot_mode = 11;//UNKNOWN_BOOT
+	dev = &(info->pdev->dev);
+	if (dev != NULL){
+		boot_node = of_parse_phandle(dev->of_node, "bootmode", 0);
+		if (!boot_node){
+			chr_err("%s: failed to get boot mode phandle\n", __func__);
+			//return;
+		}
+		else {
+			tag = (struct tag_bootmode *)of_get_property(boot_node,
+								"atag,boot", NULL);
+			if (!tag){
+				chr_err("%s: failed to get atag,boot\n", __func__);
+				//return;
+			}
+			else
+				boot_mode = tag->bootmode;
+		}
+	}
+	#endif
+#endif
+
 	if (info != NULL) {
 		struct charger_data *pdata;
 
@@ -491,12 +525,24 @@ int charger_manager_set_charging_current_limit(
 			pdata = &info->chg1_data;
 		else if (idx == SLAVE_CHARGER)
 			pdata = &info->chg2_data;
+		else if (idx == MAIN_DIVIDER_CHARGER)
+			pdata = &info->dvchg1_data;
+		else if (idx == SLAVE_DIVIDER_CHARGER)
+			pdata = &info->dvchg2_data;
 		else
 			return -ENOTSUPP;
 
 		pdata->thermal_charging_current_limit = charging_current;
 		chr_err("%s: dev:%s idx:%d en:%d\n", __func__,
 			dev_name(consumer->dev), idx, charging_current);
+#ifdef 		__CUST_POWER_OFF_CHARGING_CLOSE_THERMAL__
+	#if 	__CUST_POWER_OFF_CHARGING_CLOSE_THERMAL__
+		if (boot_mode == KERNEL_POWER_OFF_CHARGING_BOOT || boot_mode == LOW_POWER_OFF_CHARGING_BOOT)
+		{
+			pdata->thermal_charging_current_limit = -1;
+		}
+	#endif
+#endif
 		_mtk_charger_change_current_setting(info);
 		_wake_up_charger(info);
 		return 0;
@@ -717,9 +763,30 @@ static struct cdev *charger_cdev;
 static int charger_major;
 static dev_t charger_devno;
 
+#if defined(CONFIG_TCPC_MT6360) || defined(CONFIG_TCPC_MT6370)
+unsigned int battery_get_input_current(void)
+{
+	int ret;
+    int uA;
+	if (!pinfo)
+		return 0;
+	ret = charger_dev_get_ibus(pinfo->chg1_dev, &uA);
+	if(uA <= 0) {
+		uA = 400;
+	} else {
+		uA /= 1000;
+	}
+	return uA;
+}
+#endif
+
 static int is_slave_charger_exist(void)
 {
+#if defined CONFIG_CHARGER_RT9759 || defined CONFIG_CHARGER_NU2105
+	if ((get_charger_by_name("primary_divider_chg") == NULL) && (get_charger_by_name("divider_charger") == NULL))
+#else
 	if (get_charger_by_name("secondary_chg") == NULL)
+#endif
 		return 0;
 	return 1;
 }
@@ -1317,8 +1384,30 @@ int charger_psy_event(struct notifier_block *nb, unsigned long event, void *v)
 		}
 	}
 
+#ifdef CONFIG_WIRELESS_POWER_MT5728
+	if (strcmp(psy->desc->name, "mt5728_wireless") == 0) {
+		ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_CURRENT_MAX, &val);
+		if (!ret) {
+			info->data.ech_wls_charger_input_current = val.intval * 1000;
+			chr_err("charger_psy_event: wireless charger input current = %d.\n", val.intval);
+		}
+		ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_CURRENT_NOW, &val);
+//		if(info->data.ech_wls_charger_current < val.intval * 1000)
+		if(!ret)
+		{
+			info->data.ech_wls_charger_current = val.intval * 1000;
+		}
+		chr_err("charger_psy_event: wireless charger CURRENT_NOW = %d.\n", val.intval);
+	}
+#endif
+
 	return NOTIFY_DONE;
 }
+
+#ifdef CONFIG_CHARGER_NU2105
+extern int nu2105_enable_adc(struct charger_device *chg_dev, bool en);
+extern int nu2105_exist;
+#endif
 
 void mtk_charger_int_handler(void)
 {
@@ -1359,6 +1448,18 @@ static int mtk_charger_plug_in(struct charger_manager *info,
 	info->vbusov_stat = false;
 
 	chr_err("mtk_is_charger_on plug in, type:%d\n", chr_type);
+
+#ifdef CONFIG_CHARGER_NU2105
+       if (info->dvchg1_dev&&nu2105_exist) {
+               chr_err("dvchg1_dev is exist.\n");
+               nu2105_enable_adc(info->dvchg1_dev, true);
+       }
+       if (info->dvchg2_dev&&nu2105_exist) {
+               chr_err("dvchg2_dev is exist.\n");
+               nu2105_enable_adc(info->dvchg2_dev, true);
+       }
+#endif
+
 	if (info->plug_in != NULL)
 		info->plug_in(info);
 
@@ -1393,6 +1494,18 @@ static int mtk_charger_plug_out(struct charger_manager *info)
 	charger_dev_set_input_current(info->chg1_dev, 100000);
 	charger_dev_set_mivr(info->chg1_dev, info->data.min_charger_voltage);
 	charger_dev_plug_out(info->chg1_dev);
+
+#ifdef CONFIG_CHARGER_NU2105
+       if (info->dvchg1_dev&&nu2105_exist) {
+               chr_err("dvchg1_dev is exist.\n");
+               nu2105_enable_adc(info->dvchg1_dev, false);
+       }
+       if (info->dvchg2_dev&&nu2105_exist) {
+               chr_err("dvchg2_dev is exist.\n");
+               nu2105_enable_adc(info->dvchg2_dev, false);
+       }
+#endif
+
 	return 0;
 }
 
@@ -1501,7 +1614,7 @@ static void mtk_battery_notify_VBatTemp_check(struct charger_manager *info)
 			info->notify_code &= ~CHG_BAT_LT_STATUS;
 		}
 	} else {
-#ifdef BAT_LOW_TEMP_PROTECT_ENABLE
+#if 1 //def BAT_LOW_TEMP_PROTECT_ENABLE
 		if (info->battery_temp < info->thermal.min_charge_temp) {
 			info->notify_code |= CHG_BAT_LT_STATUS;
 			chr_err("bat_temp(%d) out of range(too low)\n",
@@ -1660,6 +1773,32 @@ static void mtk_chg_get_tchg(struct charger_manager *info)
 		ret = charger_dev_get_temperature(info->chg2_dev,
 			&tchg_min, &tchg_max);
 
+		if (ret < 0) {
+			pdata->junction_temp_min = -127;
+			pdata->junction_temp_max = -127;
+		} else {
+			pdata->junction_temp_min = tchg_min;
+			pdata->junction_temp_max = tchg_max;
+		}
+	}
+
+	if (info->dvchg1_dev) {
+		pdata = &info->dvchg1_data;
+		ret = charger_dev_get_adc(info->dvchg1_dev, ADC_CHANNEL_TEMP_JC,
+					  &tchg_min, &tchg_max);
+		if (ret < 0) {
+			pdata->junction_temp_min = -127;
+			pdata->junction_temp_max = -127;
+		} else {
+			pdata->junction_temp_min = tchg_min;
+			pdata->junction_temp_max = tchg_max;
+		}
+	}
+
+	if (info->dvchg2_dev) {
+		pdata = &info->dvchg2_data;
+		ret = charger_dev_get_adc(info->dvchg2_dev, ADC_CHANNEL_TEMP_JC,
+					  &tchg_min, &tchg_max);
 		if (ret < 0) {
 			pdata->junction_temp_min = -127;
 			pdata->junction_temp_max = -127;
@@ -2039,6 +2178,7 @@ static int mtk_charger_parse_dt(struct charger_manager *info,
 	info->enable_pe_2 = of_property_read_bool(np, "enable_pe_2");
 	info->enable_pe_4 = of_property_read_bool(np, "enable_pe_4");
 	info->enable_pe_5 = of_property_read_bool(np, "enable_pe_5");
+	info->enable_hvdv2 = of_property_read_bool(np, "enable_hvdv2");
 	info->enable_type_c = of_property_read_bool(np, "enable_type_c");
 	info->enable_dynamic_mivr =
 			of_property_read_bool(np, "enable_dynamic_mivr");
@@ -2203,6 +2343,23 @@ static int mtk_charger_parse_dt(struct charger_manager *info,
 		info->data.usb_unlimited_current =
 					USB_UNLIMITED_CURRENT;
 	}
+
+#ifdef CONFIG_WIRELESS_POWER_MT5728
+	if (of_property_read_u32(np, "ech_wls_charger_current", &val) >= 0) {
+			info->data.ech_wls_charger_current = val;
+	} else {
+			chr_err("use default ECH_WLS_CHARGER_CURRENT:%d\n",	ECH_WLS_CHARGER_CURRENT);
+			info->data.ech_wls_charger_current = ECH_WLS_CHARGER_CURRENT;
+	}
+	
+	if (of_property_read_u32(np, "ech_wls_charger_input_current", &val) >= 0) {
+		info->data.ech_wls_charger_input_current = val;
+	} else {
+		chr_err("use default ECH_WLS_CHARER_INPUT_CURRENT:%d\n", ECH_WLS_CHARGER_INPUT_CURRENT);
+		info->data.ech_wls_charger_input_current = ECH_WLS_CHARGER_INPUT_CURRENT;
+	}
+#endif
+
 
 	/* sw jeita */
 	if (of_property_read_u32(np, "jeita_temp_above_t4_cv", &val) >= 0)
@@ -2819,7 +2976,11 @@ static ssize_t store_input_current(struct device *dev,
 	if (buf != NULL && size != 0) {
 		pr_debug("[Battery] buf is %s and size is %zu\n", buf, size);
 		ret = kstrtouint(buf, 16, &reg);
-		pinfo->chg1_data.thermal_input_current_limit = reg;
+		if(reg==0x4660)
+			pinfo->chg1_data.thermal_input_current_limit = -1;
+		else	
+		    pinfo->chg1_data.thermal_input_current_limit = reg;
+		    
 		if (pinfo->data.parallel_vbus)
 			pinfo->chg2_data.thermal_input_current_limit = reg;
 		pr_debug("[Battery] %s: %x\n",
@@ -2889,6 +3050,17 @@ static ssize_t store_chg2_current(struct device *dev,
 	return size;
 }
 static DEVICE_ATTR(chg2_current, 0644, show_chg2_current, store_chg2_current);
+
+static ssize_t show_ibus_now(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+
+	pr_debug("[Battery] %s : %x\n",	__func__, battery_get_input_current());
+	return sprintf(buf, "%u\n",	battery_get_input_current());
+}
+
+static DEVICE_ATTR(ibus_now, 0644, show_ibus_now, NULL);
+
 
 static ssize_t show_BatNotify(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -3166,6 +3338,11 @@ static int mtk_charger_setup_files(struct platform_device *pdev)
 	if (ret)
 		goto _out;
 
+	ret = device_create_file(&(pdev->dev), &dev_attr_ibus_now);
+	if (ret)
+		goto _out;
+
+
 	battery_dir = proc_mkdir("mtk_battery_cmd", NULL);
 	if (!battery_dir) {
 		chr_err("[%s]: mkdir /proc/mtk_battery_cmd failed\n", __func__);
@@ -3264,6 +3441,9 @@ void notify_adapter_event(enum adapter_type type, enum adapter_event evt,
 			break;
 		};
 	}
+#ifdef CONFIG_RT_HVDV2_SUPPORT
+	rt_hvdv2_notifier_call(pinfo, RT_HVDV2_NOTISRC_TCP, evt, val);
+#endif
 	mtk_pe50_notifier_call(pinfo, MTK_PE50_NOTISRC_TCP, evt, val);
 }
 
@@ -4048,6 +4228,12 @@ static int mtk_charger_probe(struct platform_device *pdev)
 	if (mtk_pe50_init(info) < 0)
 		info->enable_pe_5 = false;
 
+#ifdef CONFIG_RT_HVDV2_SUPPORT
+	if (rt_hvdv2_init(info) < 0){
+		info->enable_hvdv2 = false;
+       }
+#endif    
+
 	mtk_pdc_init(info);
 	charger_ftm_init();
 	mtk_charger_get_atm_mode(info);
@@ -4113,6 +4299,9 @@ static int mtk_charger_remove(struct platform_device *dev)
 {
 	struct charger_manager *info = platform_get_drvdata(dev);
 
+#ifdef CONFIG_RT_HVDV2_SUPPORT
+	rt_hvdv2_deinit(info);
+#endif
 	mtk_pe50_deinit(info);
 	return 0;
 }
@@ -4158,7 +4347,13 @@ static int __init mtk_charger_init(void)
 {
 	return platform_driver_register(&charger_driver);
 }
+#if defined(__CUST_M156_BOARD__)
 late_initcall(mtk_charger_init);
+#elif defined(CONFIG_RT_PROP_CHGALGO)
+late_initcall_sync(mtk_charger_init);
+#else
+late_initcall(mtk_charger_init);
+#endif
 
 static void __exit mtk_charger_exit(void)
 {

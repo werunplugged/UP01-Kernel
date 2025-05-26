@@ -1144,9 +1144,9 @@ static kal_uint32 get_info(enum MSDK_SCENARIO_ID_ENUM scenario_id,
 	sensor_info->SensorClockFallingPolarity = SENSOR_CLOCK_POLARITY_LOW;
 	sensor_info->SensorHsyncPolarity = SENSOR_CLOCK_POLARITY_LOW;
 	sensor_info->SensorVsyncPolarity = SENSOR_CLOCK_POLARITY_LOW;
-	sensor_info->SensorInterruptDelayLines = 1;	/* not use */
-	sensor_info->SensorResetActiveHigh = FALSE;	/* not use */
-	sensor_info->SensorResetDelayCount = 5;	/* not use */
+	sensor_info->SensorInterruptDelayLines = 1;	/* Not used */
+	sensor_info->SensorResetActiveHigh = FALSE;	/* Not used */
+	sensor_info->SensorResetDelayCount = 5;	/* Not used */
 
 	sensor_info->SensroInterfaceType =
 		imgsensor_info.sensor_interface_type;

@@ -13,6 +13,54 @@ else \
 fi
 endef
 
+define move-kernel-module-files
+v=`cat $(2)/include/config/kernel.release`;\
+for i in `grep -h '\.ko' /dev/null $(2)/.tmp_versions/*.mod`; do \
+ o=`basename $$i`;\
+ if [ -e $(1)/lib/modules/$$o ] && cmp -s $(1)/lib/modules/$$v/kernel/$$i $(1)/lib/modules/$$o; then \
+  echo $(1)/lib/modules/$$o has no change;\
+ else \
+  echo Update $(1)/lib/modules/$$o;\
+  mv -f $(1)/lib/modules/$$v/kernel/$$i $(1)/lib/modules/$$o;\
+ fi;\
+done
+endef
+
+###############################
+define cp-up-share-to-kernel-config
+touch $(UP_SHARE_CONFIG_FILE);\
+echo some up_share_config_begin $(1) $(2);\
+startLine=`grep -n "up_share_config_begin" $(2) | head -1 | cut -d ":" -f 1`;\
+if [ $$startLine -ne 0 ];then \
+echo some up_share_config_begin find,$$startLine;\
+endLine=`cat $(2) | wc -l`;\
+sed -i "$$startLine"','$$endLine'd' $(2);\
+fi;\
+startLine2=`grep -n "up_custom_config_begin" $(2) | head -1 | cut -d ":" -f 1`;\
+if [ $$startLine2 -ne 0 ];then \
+echo some up_custom_config_begin find,$$startLine2;\
+endLine2=`cat $(2) | wc -l`;\
+sed -i "$$startLine2"','$$endLine2'd' $(2);\
+fi;\
+cat $(UP_SHARE_CONFIG_FILE)>>$(KERNEL_CONFIG_FILE)
+endef
+#########################
+###############################
+define cp-up-config-to-kernel-config
+echo some up_custom_config_begin $(1) $(2);\
+startLine=`grep -n "up_custom_config_begin" $(2) | head -1 | cut -d ":" -f 1`;\
+if [ $$startLine -ne 0 ];then \
+echo some up_custom_config_begin find,$$startLine;\
+endLine=`cat $(2) | wc -l`;\
+sed -i "$$startLine"','$$endLine'd' $(2);\
+fi;\
+cat $(UP_KERNEL_CONFIG_FILE)>>$(KERNEL_CONFIG_FILE)
+endef
+#########################
+define clean-kernel-module-dirs
+rm -rf $(1)/lib/modules/$(if $(2),`cat $(2)/include/config/kernel.release`,*/)
+endef
+
 # '\\' in command is wrongly replaced to '\\\\' in kernel/out/arch/arm/boot/compressed/.piggy.xzkern.cmd
 define fixup-kernel-cmd-file
 if [ -e $(1) ]; then cp $(1) $(1).bak; sed -e 's/\\\\\\\\/\\\\/g' < $(1).bak > $(1); rm -f $(1).bak; fi
@@ -22,7 +70,8 @@ ifneq ($(strip $(TARGET_NO_KERNEL)),true)
   KERNEL_DIR := $(KERNEL_ENV_PATH)
   mkfile_path := $(abspath $(lastword $(MAKEFILE_LIST)))
   current_dir := $(notdir $(patsubst %/,%,$(dir $(mkfile_path))))
-
+  UP_SHARE_CONFIG_FILE:=$(KERNEL_DIR)/arch/$(TARGET_ARCH)/configs/up_share_config
+  UP_KERNEL_CONFIG_FILE:=$(KERNEL_DIR)/arch/$(KERNEL_TARGET_ARCH)/configs/up_kernel_config
   kernel_build_config_suffix := .mtk
   ifeq ($(KERNEL_TARGET_ARCH),arm64)
     kernel_build_config_suffix := $(kernel_build_config_suffix).aarch64

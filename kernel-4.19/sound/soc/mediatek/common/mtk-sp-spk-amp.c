@@ -38,14 +38,44 @@
 #include "aw87339.h"
 #endif
 
+#if defined(CONFIG_SND_SOC_AW881XX_2PA)
+#include "../../codecs/aw881xx_2pa/aw881xx.h"
+extern int aw881xx_i2c_probe(struct i2c_client *i2c, const struct i2c_device_id *id);
+extern int aw881xx_i2c_remove(struct i2c_client *i2c);
+#endif
+
+#if defined(CONFIG_SND_SOC_AW882XX_2PA)
+#include "../../codecs/aw882xx_2pa/aw882xx.h"
+extern int aw882xx_i2c_probe(struct i2c_client *i2c, const struct i2c_device_id *id);
+extern int aw882xx_i2c_remove(struct i2c_client *i2c);
+#endif
 #ifdef CONFIG_SND_SMARTPA_AW883XX
 #include "../../codecs/aw883xx/aw883xx_ext.h"
 #endif
 
+#ifdef CONFIG_SND_SOC_AW882XX_2PA
+static struct snd_soc_dai_link_component aw882xx_dai_link_component[] =
+{
+    {
+       .name= "aw882xx_smartpa.6-0034",
+       .dai_name="aw882xx-aif-6-34",
+    },
+    {
+       .name= "aw882xx_smartpa.6-0035",
+       .dai_name="aw882xx-aif-6-35",
+    }
+};
+#endif
+
 #define MTK_SPK_NAME "Speaker Codec"
 #define MTK_SPK_REF_NAME "Speaker Codec Ref"
-static unsigned int mtk_spk_type;
+static unsigned int mtk_spk_type = MTK_SPK_NOT_SMARTPA;
 static int mtk_spk_i2s_out, mtk_spk_i2s_in;
+
+#ifdef CONFIG_SND_SOC_AW882XX_2PA
+static unsigned int mtk_spk_cnt = 0;
+#endif
+
 static struct mtk_spk_i2c_ctrl mtk_spk_list[MTK_SPK_TYPE_NUM] = {
 	[MTK_SPK_NOT_SMARTPA] = {
 		.codec_dai_name = "snd-soc-dummy-dai",
@@ -94,6 +124,16 @@ static struct mtk_spk_i2c_ctrl mtk_spk_list[MTK_SPK_TYPE_NUM] = {
 		.codec_name = "aw883xx_smartpa",
 	},
 #endif  /* CONFIG_SND_SMARTPA_AW883XX */
+#ifdef CONFIG_SND_SOC_AW882XX_2PA
+	[MTK_SPK_AW_AW882XX] = {
+		.i2c_probe = aw882xx_i2c_probe,
+		.i2c_remove = aw882xx_i2c_remove,
+		.codec_dai_name = "aw882xx-aif",
+		.codec_name = "aw882xx",
+		.codecs = aw882xx_dai_link_component,
+                .num_codecs = ARRAY_SIZE(aw882xx_dai_link_component),
+	},
+#endif
 };
 
 static int mtk_spk_i2c_probe(struct i2c_client *client,
@@ -103,11 +143,21 @@ static int mtk_spk_i2c_probe(struct i2c_client *client,
 
 	dev_info(&client->dev, "%s()\n", __func__);
 
-	mtk_spk_type = MTK_SPK_NOT_SMARTPA;
+	//mtk_spk_type = MTK_SPK_NOT_SMARTPA;
+	
 	for (i = 0; i < MTK_SPK_TYPE_NUM; i++) {
 		if (!mtk_spk_list[i].i2c_probe)
 			continue;
-
+	#ifdef CONFIG_SND_SOC_AW882XX_2PA
+        mtk_spk_cnt++;
+        if (mtk_spk_cnt > 1)
+        {
+                if (mtk_spk_type != i)
+                pr_err("%s cnt: %d, type: %d, i:%d\n", __func__, mtk_spk_cnt, mtk_spk_type, i);
+                else
+                pr_info("%s cnt: %d, type: %d\n", __func__, mtk_spk_cnt, mtk_spk_type);
+        }
+	#endif
 		ret = mtk_spk_list[i].i2c_probe(client, id);
 		if (ret)
 			continue;
@@ -407,10 +457,25 @@ int mtk_spk_update_dai_link(struct snd_soc_card *card,
 
 	dai_link = &card->dai_link[spk_ref_dai_link_idx];
 	dai_link->name = MTK_SPK_REF_NAME;
+#ifdef CONFIG_SND_SOC_AW882XX_2PA
+       if (mtk_spk_cnt > 1)
+       {
+               dai_link->codecs =
+               mtk_spk_list[mtk_spk_type].codecs;
+               dai_link->num_codecs =
+               mtk_spk_list[mtk_spk_type].num_codecs;
+       }else{
+               dai_link->codec_dai_name =
+                       mtk_spk_list[mtk_spk_type].codec_dai_name;
+               dai_link->codec_name =
+                       mtk_spk_list[mtk_spk_type].codec_name;
+       }
+#else
 	dai_link->codec_dai_name =
 		mtk_spk_list[mtk_spk_type].codec_dai_name;
 	dai_link->codec_name =
 		mtk_spk_list[mtk_spk_type].codec_name;
+#endif
 	dai_link->ignore_pmdown_time = 1;
 	if (i2s_mck == mtk_spk_i2s_in)
 		dai_link->ops = i2s_ops;

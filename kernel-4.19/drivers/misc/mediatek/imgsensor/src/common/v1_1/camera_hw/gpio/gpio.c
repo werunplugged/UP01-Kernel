@@ -4,6 +4,7 @@
  */
 
 #include "gpio.h"
+#include <linux/cust_include/cust_project_all_config.h>
 
 struct GPIO_PINCTRL gpio_pinctrl_list_cam[
 			GPIO_CTRL_STATE_MAX_NUM_CAM] = {
@@ -22,6 +23,12 @@ struct GPIO_PINCTRL gpio_pinctrl_list_cam[
 	{"ldo_vcamd_0"},
 	{"ldo_vcamio_1"},
 	{"ldo_vcamio_0"},
+	{"ldo_vcamaf_1"},
+	{"ldo_vcamaf_0"},
+    {"ldo_vcama2_1"},
+    {"ldo_vcama2_0"},
+    {"ldo_vcamd2_1"},
+    {"ldo_vcamd2_0"},
 };
 
 #ifdef MIPI_SWITCH
@@ -35,6 +42,24 @@ struct GPIO_PINCTRL gpio_pinctrl_list_switch[
 #endif
 
 extern void gpio_dump_regs(void);
+
+#ifdef CONFIG_LDO_WL2864C
+static const int wl2864_voltage[] = {
+	WL2864_VOLTAGE_0,
+	WL2864_VOLTAGE_1000,
+	WL2864_VOLTAGE_1100,
+	WL2864_VOLTAGE_1200,
+	WL2864_VOLTAGE_1210,
+	WL2864_VOLTAGE_1220,
+	WL2864_VOLTAGE_1500,
+	WL2864_VOLTAGE_1800,
+	WL2864_VOLTAGE_2200,
+	WL2864_VOLTAGE_2500,
+	WL2864_VOLTAGE_2800,
+	WL2864_VOLTAGE_2900,
+	WL2864_VOLTAGE_2950,
+};
+#endif
 
 static struct GPIO gpio_instance;
 
@@ -116,6 +141,10 @@ static enum IMGSENSOR_RETURN gpio_release(void *pinstance)
 {
 	return IMGSENSOR_RETURN_SUCCESS;
 }
+#ifdef CONFIG_LDO_WL2864C
+extern int will_ldo_vout(int ldo_num, int ldo_vout);
+extern int will_ldo_en(int ldo_num, int en);
+#endif
 
 static enum IMGSENSOR_RETURN gpio_set(
 	void *pinstance,
@@ -126,7 +155,9 @@ static enum IMGSENSOR_RETURN gpio_set(
 	struct pinctrl_state  *ppinctrl_state;
 	struct GPIO           *pgpio = (struct GPIO *)pinstance;
 	enum   GPIO_STATE      gpio_state;
-
+#ifdef CONFIG_LDO_WL2864C
+	int ldo_num = -1, ldo_vout = -1, ldo_en = -1;
+#endif
 	/* PK_DBG("%s :debug pinctrl ENABLE, PinIdx %d, Val %d\n",
 	 *	__func__, pin, pin_state);
 	 */
@@ -135,7 +166,8 @@ static enum IMGSENSOR_RETURN gpio_set(
 #ifdef MIPI_SWITCH
 	    pin > IMGSENSOR_HW_PIN_MIPI_SWITCH_SEL ||
 #else
-		pin > IMGSENSOR_HW_PIN_DOVDD ||
+	   //pin > IMGSENSOR_HW_PIN_DOVDD ||
+	    pin > IMGSENSOR_HW_PIN_DVDD2 ||
 #endif
 		pin_state < IMGSENSOR_HW_PIN_STATE_LEVEL_0 ||
 		pin_state > IMGSENSOR_HW_PIN_STATE_LEVEL_HIGH)
@@ -160,13 +192,140 @@ static enum IMGSENSOR_RETURN gpio_set(
 	}
 
 	mutex_lock(pgpio->pgpio_mutex);
+#ifdef CONFIG_LDO_WL2864C
+	if (IMGSENSOR_SENSOR_IDX_MAIN == sensor_idx) // main
+	{
+		if(pin == IMGSENSOR_HW_PIN_AFVDD) //AF
+		{
+			ldo_num = __CUST_CAMERA_MAIN_VCAMAF_PMU_WL2864C_SUPPORT__; //avdd1v8
+			ldo_vout =  wl2864_voltage[pin_state - IMGSENSOR_HW_PIN_STATE_LEVEL_0];
+		}
+		else if (pin == IMGSENSOR_HW_PIN_AVDD) //AVDD
+		{
+			ldo_num = __CUST_CAMERA_MAIN_VCAMA_PMU_WL2864C_SUPPORT__;
+			ldo_vout =  wl2864_voltage[pin_state - IMGSENSOR_HW_PIN_STATE_LEVEL_0];
+		}
+		else if (pin == IMGSENSOR_HW_PIN_DVDD) //DVDD
+		{
+			ldo_num = __CUST_CAMERA_MAIN_VCAMD_PMU_WL2864C_SUPPORT__;
+			ldo_vout =  wl2864_voltage[pin_state - IMGSENSOR_HW_PIN_STATE_LEVEL_0];
+		}
+		else if (pin == IMGSENSOR_HW_PIN_DOVDD) //IOVDD
+		{
+			ldo_num = __CUST_CAMERA_MAIN_VCAMIO_PMU_WL2864C_SUPPORT__;
+			ldo_vout =  wl2864_voltage[pin_state - IMGSENSOR_HW_PIN_STATE_LEVEL_0];
+		}
+		else if (pin == IMGSENSOR_HW_PIN_AVDD2) //AVDD2
+		{
+			ldo_num = __CUST_CAMERA_MAIN_VCAMA2_PMU_WL2864C_SUPPORT__;
+			ldo_vout =  wl2864_voltage[pin_state - IMGSENSOR_HW_PIN_STATE_LEVEL_0];
+		}
+	}
+	else if (IMGSENSOR_SENSOR_IDX_SUB == sensor_idx) //sub
+	{
+		if(pin == IMGSENSOR_HW_PIN_AFVDD) //AF
+		{
+			ldo_num = __CUST_CAMERA_SUB_VCAMAF_PMU_WL2864C_SUPPORT__; //avdd1v8
+			ldo_vout =  wl2864_voltage[pin_state - IMGSENSOR_HW_PIN_STATE_LEVEL_0];
+		}
+		else if (pin == IMGSENSOR_HW_PIN_AVDD) //AVDD
+		{
+			ldo_num = __CUST_CAMERA_SUB_VCAMA_PMU_WL2864C_SUPPORT__;
+			ldo_vout =  wl2864_voltage[pin_state - IMGSENSOR_HW_PIN_STATE_LEVEL_0];
+		}
+		else if (pin == IMGSENSOR_HW_PIN_DVDD) //DVDD
+		{
+			ldo_num = __CUST_CAMERA_SUB_VCAMD_PMU_WL2864C_SUPPORT__;
+			ldo_vout =  wl2864_voltage[pin_state - IMGSENSOR_HW_PIN_STATE_LEVEL_0];
+		}
+		else if (pin == IMGSENSOR_HW_PIN_DOVDD) //IOVDD
+		{
+			ldo_num = __CUST_CAMERA_SUB_VCAMIO_PMU_WL2864C_SUPPORT__;
+			ldo_vout =  wl2864_voltage[pin_state - IMGSENSOR_HW_PIN_STATE_LEVEL_0];
+		}
+	}
+	else if (IMGSENSOR_SENSOR_IDX_MAIN2 == sensor_idx) //main2
+	{
+		if(pin == IMGSENSOR_HW_PIN_AFVDD) //AF
+		{
+			ldo_num = __CUST_CAMERA_MAIN2_VCAMAF_PMU_WL2864C_SUPPORT__; //avdd1v8
+			ldo_vout =  wl2864_voltage[pin_state - IMGSENSOR_HW_PIN_STATE_LEVEL_0];
+		}
+		else if (pin == IMGSENSOR_HW_PIN_AVDD) //AVDD
+		{
+			ldo_num = __CUST_CAMERA_MAIN2_VCAMA_PMU_WL2864C_SUPPORT__;
+			ldo_vout =  wl2864_voltage[pin_state - IMGSENSOR_HW_PIN_STATE_LEVEL_0];
+		}
+		else if (pin == IMGSENSOR_HW_PIN_DVDD) //DVDD
+		{
+			ldo_num = __CUST_CAMERA_MAIN2_VCAMD_PMU_WL2864C_SUPPORT__;
+			ldo_vout =  wl2864_voltage[pin_state - IMGSENSOR_HW_PIN_STATE_LEVEL_0];
+		}
+		else if (pin == IMGSENSOR_HW_PIN_DOVDD) //IOVDD
+		{
+			ldo_num = __CUST_CAMERA_MAIN2_VCAMIO_PMU_WL2864C_SUPPORT__;
+			ldo_vout =  wl2864_voltage[pin_state - IMGSENSOR_HW_PIN_STATE_LEVEL_0];
+		}
+	}
+	else if (IMGSENSOR_SENSOR_IDX_SUB2 == sensor_idx) //sub2
+	{
+		if(pin == IMGSENSOR_HW_PIN_AFVDD) //AF
+		{
+			ldo_num = __CUST_CAMERA_SUB2_VCAMAF_PMU_WL2864C_SUPPORT__; //avdd1v8
+			ldo_vout =  wl2864_voltage[pin_state - IMGSENSOR_HW_PIN_STATE_LEVEL_0];
+		}
+		else if (pin == IMGSENSOR_HW_PIN_AVDD) //AVDD
+		{
+			ldo_num = __CUST_CAMERA_SUB2_VCAMA_PMU_WL2864C_SUPPORT__;
+			ldo_vout =  wl2864_voltage[pin_state - IMGSENSOR_HW_PIN_STATE_LEVEL_0];
+		}
+		else if (pin == IMGSENSOR_HW_PIN_DVDD) //DVDD
+		{
+			ldo_num = __CUST_CAMERA_SUB2_VCAMD_PMU_WL2864C_SUPPORT__;
+			ldo_vout =  wl2864_voltage[pin_state - IMGSENSOR_HW_PIN_STATE_LEVEL_0];
+		}
+		else if (pin == IMGSENSOR_HW_PIN_DOVDD) //IOVDD
+		{
+			ldo_num = __CUST_CAMERA_SUB2_VCAMIO_PMU_WL2864C_SUPPORT__;
+			ldo_vout =  wl2864_voltage[pin_state - IMGSENSOR_HW_PIN_STATE_LEVEL_0];
+		}
+	}
 
+	if(GPIO_STATE_L == gpio_state)
+	{
+		ldo_en = 0;
+	}
+	else
+	{
+		ldo_en = 1;
+	}
+
+	pr_err("%s: ldo_num=%d, ldo_vout=%d, ldo_en=0x%d\n", __func__, ldo_num, ldo_vout, ldo_en);
+
+	if ((-1 != ldo_num) && (0xFFFF != ldo_num))
+	{
+		if (-1 != ldo_vout)
+			will_ldo_vout(ldo_num, ldo_vout);
+		if (-1 != ldo_en)
+			will_ldo_en(ldo_num, ldo_en);
+	}
+	else 
+	{
+		if (ppinctrl_state != NULL && !IS_ERR(ppinctrl_state))
+			pinctrl_select_state(pgpio->ppinctrl, ppinctrl_state);
+		else
+			PK_DBG("%s : pinctrl err, PinIdx %d, Val %d\n",
+				__func__, pin, pin_state);
+	}
+
+#else
 	if (ppinctrl_state != NULL && !IS_ERR(ppinctrl_state))
 		pinctrl_select_state(pgpio->ppinctrl, ppinctrl_state);
 	else
 		PK_PR_ERR("%s : pinctrl err, PinIdx %d, Val %d\n",
 			__func__, pin, pin_state);
 
+#endif
 	mutex_unlock(pgpio->pgpio_mutex);
 
 	return IMGSENSOR_RETURN_SUCCESS;

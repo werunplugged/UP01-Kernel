@@ -1,6 +1,16 @@
 /* SPDX-License-Identifier: GPL-2.0
  *
  * Copyright (c) 2015-2019 TrustKernel Incorporated
+ * All Rights Reserved.
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #ifndef _TEE_IOC_H
@@ -72,6 +82,18 @@ struct tee_shm_io {
 	uint32_t registered;
 };
 
+struct tee_gen_hw_rand_io {
+	union {
+		void __user *data;
+		uint64_t pad_buffer;
+	};
+
+	union {
+		size_t length;
+		uint64_t pad_length;
+	};
+};
+
 struct tee_ta_inst_desc {
 	union {
 		struct TEEC_UUID __user *uuid;
@@ -132,6 +154,10 @@ struct tee_spta_inst_desc {
 
 #define TEE_QUERY_DRV_FEATURE_IOC \
 	_IOR('t', 183, uint32_t)
+
+#define TEE_GENERATE_HW_RANDOM_IOC \
+	_IOWR('t', 255, struct tee_gen_hw_rand_io)
+
 
 /* Command IDs */
 #define TEEC_TUI_CMD_NONE				0

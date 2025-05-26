@@ -1,6 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2015-2019 TrustKernel Incorporated
+ * All Rights Reserved.
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #include <linux/slab.h>
@@ -14,7 +24,6 @@
 
 #include "tee_shm.h"
 #include "tee_core_priv.h"
-#include "tee_tui_hal.h"
 
 static int _init_tee_cmd(struct tee_session *sess, struct tee_cmd_io *cmd_io,
 			 struct tee_cmd *cmd);
@@ -85,10 +94,10 @@ static int tee_session_open_be(struct tee_session *sess,
 	struct tee *tee;
 	struct tee_cmd cmd;
 
-	WARN_ON(!sess || !sess->ctx || !sess->ctx->tee);
+	if (WARN_ON(!sess || !sess->ctx || !sess->ctx->tee))
+		return -EINVAL;
 
 	tee = sess->ctx->tee;
-
 
 	sess->sessid = 0;
 	ret = _init_tee_cmd(sess, cmd_io, &cmd);
@@ -146,7 +155,8 @@ static int tee_session_close_be(struct tee_session *sess)
 	int ret = -EINVAL;
 	struct tee *tee;
 
-	WARN_ON(!sess || !sess->ctx || !sess->ctx->tee);
+	if (WARN_ON(!sess || !sess->ctx || !sess->ctx->tee))
+		return -1;
 
 	tee = sess->ctx->tee;
 
@@ -258,92 +268,6 @@ exit:
 	return ret;
 }
 
-static int tee_do_kernel_cancel_cmd(struct tee_session *sess,
-					struct tee_cmd_io *k_cmd)
-{
-	int ret = -EINVAL;
-	struct tee *tee;
-	struct tee_context *ctx;
-	struct tee_cmd cmd;
-
-	WARN_ON(!sess->ctx);
-	WARN_ON(!sess->ctx->tee);
-	ctx = sess->ctx;
-	tee = sess->ctx->tee;
-
-
-	WARN_ON(!sess->sessid);
-
-	if ((k_cmd == NULL || k_cmd->op == NULL) || (k_cmd->uuid != NULL) ||
-		(k_cmd->data != NULL) || (k_cmd->data_size != 0)) {
-		pr_err(
-			"op or/and data parameters are not valid\n");
-		goto exit;
-	}
-
-	cmd.cmd = k_cmd->cmd;
-	cmd.origin = TEEC_ORIGIN_TEE;
-	cmd.err = TEEC_ERROR_BAD_PARAMETERS;
-
-	cmd.param.type_original = 0;
-
-	ret = tee->ops->cancel(sess, &cmd);
-
-	if (ret)
-		pr_err("tee_cancel failed\n");
-
-exit:
-	return ret;
-}
-
-DECLARE_COMPLETION(io_comp);
-static int flag_tui_obj;
-
-struct tui_obj {
-	struct tee_cmd_io op;
-	struct tee_session *sess;
-	uint32_t cmd_id;
-	uint32_t status;
-	struct mutex lock;
-} g_tui_obj;
-
-static uint32_t send_cmd_to_user(uint32_t command_id)
-{
-	uint32_t ret = 0;
-
-	g_tui_obj.cmd_id = command_id;
-	complete(&io_comp);
-
-	return ret;
-}
-
-bool teec_notify_event(uint32_t event_type)
-{
-	bool ret = false;
-
-	/* Cancel the TUI session if exists */
-	if (g_tui_obj.status)
-		ret = tee_do_kernel_cancel_cmd(g_tui_obj.sess, &g_tui_obj.op);
-
-	return ret;
-}
-EXPORT_SYMBOL(teec_notify_event);
-
-int teec_wait_cmd(uint32_t *cmd_id)
-{
-	/* Wait for signal from DCI handler */
-	wait_for_completion(&io_comp);
-#ifdef INIT_COMPLETION
-	INIT_COMPLETION(io_comp);
-#else
-	io_comp.done = 0;
-#endif
-
-	*cmd_id = g_tui_obj.cmd_id;
-	return 0;
-}
-EXPORT_SYMBOL(teec_wait_cmd);
-
 static long tee_session_internal_ioctl(struct tee_session *sess,
 					unsigned int cmd, unsigned long arg)
 {
@@ -361,68 +285,6 @@ static long tee_session_internal_ioctl(struct tee_session *sess,
 	case TEE_REQUEST_CANCELLATION_IOC:
 		ret = tee_do_cancel_cmd(sess,
 			(struct tee_cmd_io __user *) arg);
-		break;
-	case TEE_TUI_OPEN_SESSION_IOC:
-		pr_debug("TEE_TUI_OPEN_SESSION_IOC.\n");
-		if (flag_tui_obj == 0) {
-			mutex_init(&g_tui_obj.lock);
-			flag_tui_obj = 1;
-		}
-		mutex_lock(&g_tui_obj.lock);
-		if (g_tui_obj.status != 0 ||
-			(struct tee_cmd_io __user *)arg == NULL) {
-			ret = -EBUSY;
-			mutex_unlock(&g_tui_obj.lock);
-			pr_warn(
-				"TEE_TUI_OPEN_SESSION_IOC: tui busy or invalid argument\n");
-			break;
-		}
-		if (tee_copy_from_user(sess->ctx, &g_tui_obj.op, (void *)arg,
-					sizeof(struct tee_cmd_io))) {
-			ret = -EINVAL;
-			mutex_unlock(&g_tui_obj.lock);
-			break;
-		}
-		/* reset part of op */
-		g_tui_obj.op.uuid = NULL;
-		g_tui_obj.op.data = NULL;
-		g_tui_obj.op.data_size = 0;
-
-		g_tui_obj.sess = sess;
-		g_tui_obj.status = 1;
-		mutex_unlock(&g_tui_obj.lock);
-		/* Start android TUI activity */
-		ret = send_cmd_to_user(TEEC_TUI_CMD_START_ACTIVITY);
-		if (ret != 0) {
-			mutex_lock(&g_tui_obj.lock);
-			g_tui_obj.status = 0;
-			mutex_unlock(&g_tui_obj.lock);
-			break;
-		}
-		/* Deactivate linux UI drivers */
-		ret = hal_tui_deactivate();
-		if (ret != 0) {
-			mutex_lock(&g_tui_obj.lock);
-			g_tui_obj.status = 0;
-			mutex_unlock(&g_tui_obj.lock);
-			send_cmd_to_user(TEEC_TUI_CMD_STOP_ACTIVITY);
-			break;
-		}
-		break;
-	case TEE_TUI_CLOSE_SESSION_IOC:
-		pr_debug(
-			"TEE_TUI_CLOSE_SESSION_IOC.\n");
-		if (flag_tui_obj == 0) {
-			mutex_init(&g_tui_obj.lock);
-			flag_tui_obj = 1;
-		}
-		mutex_lock(&g_tui_obj.lock);
-		g_tui_obj.status = 0;
-		mutex_unlock(&g_tui_obj.lock);
-		/* Activate linux UI drivers */
-		ret = hal_tui_activate();
-		/* Stop android TUI activity */
-		ret = send_cmd_to_user(TEEC_TUI_CMD_STOP_ACTIVITY);
 		break;
 	default:
 		ret = -EINVAL;
@@ -455,7 +317,6 @@ static long tee_session_compat_ioctl(struct file *filp, unsigned int cmd,
 	switch (cmd) {
 	case TEE_INVOKE_COMMAND_IOC:
 	case TEE_REQUEST_CANCELLATION_IOC:
-	case TEE_TUI_OPEN_SESSION_IOC:
 		if (convert_compat_tee_cmd((struct tee_cmd_io __user *) arg))
 			return -EFAULT;
 		break;
@@ -527,10 +388,10 @@ struct tee_session *tee_session_create_and_open(struct tee_context *ctx,
 	struct tee_session *sess;
 	struct tee *tee;
 
-	WARN_ON(!ctx->tee);
+	if (WARN_ON(!ctx->tee))
+		return NULL;
 
 	tee = ctx->tee;
-
 	ret = tee_get(tee);
 	if (ret)
 		return ERR_PTR(-EBUSY);
@@ -576,8 +437,8 @@ int tee_session_create_fd(struct tee_context *ctx, struct tee_cmd_io *cmd_io)
 
 	(void) tee;
 
-	WARN_ON(cmd_io->fd_sess > 0);
-
+	if (WARN_ON(cmd_io->fd_sess > 0))
+		return -EINVAL;
 
 	sess = tee_session_create_and_open(ctx, cmd_io);
 	if (IS_ERR_OR_NULL(sess)) {

@@ -8,11 +8,37 @@
 #include "eeprom_i2c_common_driver.h"
 #include "eeprom_i2c_custom_driver.h"
 #include "kd_imgsensor.h"
+#include <linux/cust_include/cust_project_all_config.h>
 
+#if defined(S5KHM2SP_OTP)
+#include "s5khm2sp_otp/s5khm2sp_otp_cam_cal.h"
+#endif
+#if defined(S5KHM6SP_OTP)
+#include "s5khm6sp_otp/s5khm6sp_otp_cam_cal.h"
+#endif
+#if defined(S5KGD2SM_OTP)
+#include "s5kgd2sm_otp/s5kgd2sm_otp_cam_cal.h"
+#endif
+#if defined(S5K4H7_OTP)
+#include "s5k4h7_otp/s5k4h7_otp_cam_cal.h"
+#endif
 #define MAX_EEPROM_SIZE_16K 0x4000
 
 
 struct stCAM_CAL_LIST_STRUCT g_camCalList[] = {
+#if defined(S5KHM2SP_OTP)
+	{S5KHM2SP_SENSOR_ID, 0xA0, s5khm2sp_selective_read_region},
+#endif
+#if defined(S5KHM6SP_OTP)
+	{S5KHM6SP_SENSOR_ID, 0xA0, s5khm6sp_selective_read_region},
+#endif
+#if defined(S5KGD2SM_OTP)
+	{S5KGD2SM_SENSOR_ID, 0xA0, s5kgd2sm_selective_read_region},
+#endif
+#if defined(S5K4H7_OTP)
+	{S5K4H7_SENSOR_ID, 0xA0, s5k4h7_selective_read_region},
+#endif
+#if 0
 	/*Below is commom sensor */
 	{IMX586_SENSOR_ID, 0xA0, Common_read_region, MAX_EEPROM_SIZE_16K,
 		BL24SA64_write_region},
@@ -36,6 +62,7 @@ struct stCAM_CAL_LIST_STRUCT g_camCalList[] = {
 	{IMX481_SENSOR_ID, 0xA4, Common_read_region, DEFAULT_MAX_EEPROM_SIZE_8K,
 		BL24SA64_write_region},
 	{OV13B10LN_SENSOR_ID, 0xB0, Common_read_region},
+#endif
 #ifdef SUPPORT_S5K4H7
 	{S5K4H7LN_SENSOR_ID, 0x20, s5k4h7_read_region},
 #endif

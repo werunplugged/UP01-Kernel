@@ -25,7 +25,7 @@
 /*****************************************************************
  * Private constant and macro definitions using #define
  *****************************************************************/
-/* 预设的ft_rw_iic_drv的主设备号*/
+/* The preset main device number for ft_rw_iic_drv*/
 #define FTS_RW_IIC_DRV "ft_rw_iic_drv"
 #define FTS_RW_IIC_DRV_MAJOR 210
 #define FTS_I2C_RDWR_MAX_QUEUE 36

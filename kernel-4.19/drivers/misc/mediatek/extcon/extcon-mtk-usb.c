@@ -21,6 +21,9 @@
 #include <linux/workqueue.h>
 
 #include "extcon-mtk-usb.h"
+#if defined(CONFIG_CHARGER_PSC5415A) || defined(CONFIG_CHARGER_BCT24157)
+#include <charger_class.h>
+#endif
 
 #ifdef CONFIG_TCPC_CLASS
 #include "tcpm.h"
@@ -29,6 +32,122 @@
 #ifdef CONFIG_MTK_USB_TYPEC_U3_MUX
 #include "mux_switch.h"
 #endif
+
+#include <linux/cust_include/cust_project_all_config.h>
+
+#ifdef __CUST_TCPC_POLARITY_DETECT__
+enum up_tcpc_polarity{
+	UP_TCPC_POLARITY_P,
+	UP_TCPC_POLARITY_N,
+	UP_TCPC_PLUGOUT
+};
+int up_tcpc_polarity_val = UP_TCPC_PLUGOUT;
+void update_tcpc_polarity(int polarity)
+{
+	up_tcpc_polarity_val = polarity;
+
+}
+#endif
+
+#ifdef __CUST_OTG_GPIO_SELECT__
+       #if __CUST_OTG_GPIO_SELECT__
+		#include <linux/of_gpio.h> 
+		#include <linux/delay.h> 
+
+		#define OTG_SELECT_GPIO_NAME       "otg_gpio_select"
+		static int up_otg_select_gpio_num;
+		void up_otg_gpio_set(bool en);
+		int get_otg_select_gpio(void);
+		static int up_parse_otg_dts(struct device_node *node, const char *gpio_name);
+
+#endif
+#endif
+
+#ifdef __CUST_WIRELESS_CHARGE_SUPPORT__
+       #if __CUST_WIRELESS_CHARGE_SUPPORT__
+               #include <linux/delay.h> 
+               #include <linux/of_gpio.h> 
+               
+               #define WIRELESS_CHARGE_GPIO_NAME       "wireless_charge_gpio"
+               static int up_wireless_charge_gpio_num;
+               
+               int get_wireless_gpio(void);
+               int up_parse_wireless_dts(struct device_node *node, const char *gpio_name);
+
+       #ifdef CONFIG_WIRELESS_POWER_MT5728
+               extern ssize_t mt5728_force_chipen_disable(void);
+               extern ssize_t mt5728_chipen_ctrl_by_hardware(void);
+               extern int is_reverse_charger_online(void);
+       #endif
+
+       #endif
+#endif
+
+#ifdef __CUST_UVC_VBUS_GPIO__
+
+
+static int up_uvc_vbus_gpio_num;
+static int up_uvc_switch_gpio_num;
+static int up_parse_dts(struct device_node *node, const char *gpio_name)
+{
+	int gpio_num = 0;
+	struct gpio_desc *desc;
+	int ret = 0;
+
+	if (node)
+	{
+		gpio_num = of_get_named_gpio(node, gpio_name, 0);
+		if (gpio_num < 0)
+		{
+			pr_info("%s: of_get_named_gpio fail. \n", __func__);
+			return -1;
+		}
+		else
+		{
+			pr_info("%s: of_get_named_gpio GPIO is %d.\n", __func__, gpio_num);
+			desc = gpio_to_desc(gpio_num);
+			if (!desc)
+			{
+				pr_info("%s: gpio_desc is null.\n", __func__);
+				return -1;
+			}
+			else
+				pr_info("%s: gpio_desc is not null.\n", __func__);
+
+			if (gpio_is_valid(gpio_num))
+				pr_info("%s: gpio number %d is valid. \n", __func__ ,gpio_num);
+
+			ret = gpio_request(gpio_num, gpio_name);
+			if (ret)
+			{
+				pr_info("%s: gpio_request fail. \n", __func__);
+				return -1;
+			}
+			else
+			{
+				ret = gpio_direction_output(gpio_num, 1);
+				if (ret)
+				{
+					pr_info("%s: gpio_direction_output failed. \n", __func__);
+					return -1;
+				}
+
+				gpio_set_value(gpio_num, 0);
+				pr_info("%s: gpio_get_value =%d. \n", __func__, gpio_get_value(gpio_num));
+
+				return gpio_num;
+			}
+		}
+	}
+	else
+	{
+		pr_info("%s: get gpio num fail. \n", __func__);
+		return -1;
+	}
+}
+#endif
+
+
 
 static struct mtk_extcon_info *g_extcon;
 
@@ -242,7 +361,7 @@ static int mtk_usb_extcon_psy_init(struct mtk_extcon_info *extcon)
 
 	return 0;
 }
-
+extern void mobile_source_handler(bool open);
 #if defined ADAPT_CHARGER_V1
 #include <mt-plat/v1/charger_class.h>
 static struct charger_device *primary_charger;
@@ -258,21 +377,88 @@ static int mtk_usb_extcon_set_vbus_v1(bool is_on) {
 #if defined(CONFIG_MTK_GAUGE_VERSION) && (CONFIG_MTK_GAUGE_VERSION == 30)
 	pr_info("%s: is_on=%d\n", __func__, is_on);
 	if (is_on) {
+#ifdef CONFIG_WIRELESS_POWER_MT5728
+		if(is_reverse_charger_online()){
+#ifdef __CUST_OTG_GPIO_SELECT__
+       #if __CUST_OTG_GPIO_SELECT__
+			gpio_direction_output(up_otg_select_gpio_num,0);
+			gpio_set_value(up_otg_select_gpio_num, 0);		
+#endif
+#endif	
+		#ifdef __CUST_WIRELESS_CHARGE_SUPPORT__	
+			#if __CUST_WIRELESS_CHARGE_SUPPORT__
+				pr_info("pull up the wireless gpio before enable OTG.\n");
+				gpio_direction_output(up_wireless_charge_gpio_num, 0);
+				gpio_set_value(up_wireless_charge_gpio_num, 0);//state:insert otg;chipen-pin(gpio26) output high
+			#endif
+		#endif		
+			printk("UP_OTG_up_is_reverse_charger_online:%d\n",is_reverse_charger_online());
+		}	
+		else
+#endif				
+		{
+		#ifdef CONFIG_WIRELESS_POWER_MT5728
+			mt5728_force_chipen_disable();//state:insert otg;chipen-pin(gpio26) output high
+		#endif
+		
+		#ifdef __CUST_WIRELESS_CHARGE_SUPPORT__	
+			#if __CUST_WIRELESS_CHARGE_SUPPORT__
+				pr_info("pull up the wireless gpio before enable OTG.\n");
+				gpio_direction_output(up_wireless_charge_gpio_num, 0);
+				gpio_set_value(up_wireless_charge_gpio_num, 1);//state:insert otg;chipen-pin(gpio26) output high
+			#endif
+		#endif	
+		#ifdef __CUST_OTG_GPIO_SELECT__
+       			#if __CUST_OTG_GPIO_SELECT__	
+				up_otg_gpio_set(true);//state:insert otg;otg-en-pin(gpio25) output high
+				printk("UP_OTG_up_otg_gpio_set_true\n");
+			#endif
+		#endif						
+		}	
 		charger_dev_enable_otg(primary_charger, true);
+#ifdef __CUST_OTG_CURRENT__
+		charger_dev_set_boost_current_limit(primary_charger,
+			__CUST_OTG_CURRENT__);
+#else
 		charger_dev_set_boost_current_limit(primary_charger,
 			1500000);
+#endif
 		#if 0
 		{// # workaround
 			charger_dev_kick_wdt(primary_charger);
 			enable_boost_polling(true);
 		}
 		#endif
+	#if defined(CONFIG_MACH_MT6853) || defined(CONFIG_MACH_MT6833) || defined(CONFIG_MACH_MT6877)
+		mobile_source_handler(1);
+	#endif
 	} else {
 		charger_dev_enable_otg(primary_charger, false);
+#ifdef __CUST_OTG_GPIO_SELECT__
+       #if __CUST_OTG_GPIO_SELECT__
+		up_otg_gpio_set(false); //state:Pull out the otg;otg-en-pin(gpio25) input
+		printk("UP_OTG_up_otg_gpio_set_false\n");
+	#endif
+#endif
+#ifdef __CUST_WIRELESS_CHARGE_SUPPORT__
+	#if __CUST_WIRELESS_CHARGE_SUPPORT__
+		pr_info("pull down the wireless gpio after disable OTG.\n");	
+			gpio_direction_input(up_wireless_charge_gpio_num); //state:Pull out the otg;chipen-pin(gpio26) output high			
+	#endif
+#endif
+
+#ifdef CONFIG_WIRELESS_POWER_MT5728
+pr_info("pull down the wireless gpio after disable OTG.\n");
+		mt5728_chipen_ctrl_by_hardware(); //state:Pull out the otg;chipen-pin(gpio26) output high
+		msleep(5);
+#endif
 		#if 0
 			//# workaround
 			enable_boost_polling(false);
 		#endif
+	#if defined(CONFIG_MACH_MT6853) || defined(CONFIG_MACH_MT6833) || defined(CONFIG_MACH_MT6877)
+		mobile_source_handler(0);
+	#endif
 	}
 #else
 	if (is_on) {
@@ -287,23 +473,245 @@ static int mtk_usb_extcon_set_vbus_v1(bool is_on) {
 }
 #endif //ADAPT_CHARGER_V1
 
+/*OTG BEGIN*/
+#ifdef __CUST_OTG_GPIO_SELECT__
+       #if __CUST_OTG_GPIO_SELECT__
+static int up_parse_otg_dts(struct device_node *node, const char *gpio_name)
+{
+       int gpio_num = 0;
+       struct gpio_desc *desc;
+       int ret = 0;
+       printk("%s: UP_OTG_up_parse_otg_dts \n", __func__);
+       if (node)
+       {
+               gpio_num = of_get_named_gpio(node, gpio_name, 0);
+               if (gpio_num < 0)
+               {
+                       printk("%s: UP_OTG_of_get_named_gpio fail. \n", __func__);
+                       return -1;
+               }
+               else
+               {
+                       printk("%s: UP_OTG_of_get_named_gpio GPIO is %d.\n", __func__, gpio_num);
+                       desc = gpio_to_desc(gpio_num);
+                       if (!desc)
+                       {
+                               printk("%s: UP_OTG_gpio_desc is null.\n", __func__);
+                               return -1;
+                       }
+                       else
+                               printk("%s: UP_OTG_gpio_desc is not null.\n", __func__);
+
+                       if (gpio_is_valid(gpio_num))
+                               printk("%s: UP_OTG_gpio number %d is valid. \n", __func__ ,gpio_num);
+
+                       ret = gpio_request(gpio_num, gpio_name);
+                       if (ret)
+                       {
+                               printk("%s: UP_OTG_gpio_request fail. \n", __func__);
+                               return -1;
+                       }
+                       else
+                       {
+                               ret = gpio_direction_output(gpio_num, 1);
+                               if (ret)
+                               {
+                                       printk("%s: UP_OTG_gpio_direction_output failed. \n", __func__);
+                                       return -1;
+                               }
+
+                               gpio_set_value(gpio_num, 0);
+                               printk("%s: UP_OTG_gpio_get_value =%d. \n", __func__, gpio_get_value(gpio_num));
+
+                               return gpio_num;
+                       }
+               }
+       }
+       else
+       {
+               printk("%s: UP_OTG_get gpio num fail. \n", __func__);
+               return -1;
+       }
+}
+
+int get_otg_select_gpio(void)
+{
+       struct device_node *node;
+       printk("%s: UP_OTG_enter. \n", __func__);
+
+       node = of_find_compatible_node(NULL, NULL, "mediatek,extcon-usb");
+       if (node)
+       {
+               up_otg_select_gpio_num = up_parse_otg_dts(node, OTG_SELECT_GPIO_NAME);
+
+               if (0 > up_otg_select_gpio_num)
+               {
+                       printk("%s: UP_OTG_up_parse_dts 1 fail. \n", __func__);
+                       return -1;
+               }
+       }
+       else
+       {
+               printk("%s: UP_OTG_cannot get the node: 'mediatek,usb3'.\n", __func__);
+               return -ENODEV;
+       }
+
+       printk("%s: UP_OTG_end. \n", __func__);
+       return 0;
+}
+
+void up_otg_gpio_set(bool en)
+{
+	if(en) {
+		gpio_direction_output(up_otg_select_gpio_num,0);
+		gpio_set_value(up_otg_select_gpio_num, 1);
+		mdelay(5);
+		printk("UP_OTG_pull up the otg select gpio after enable OTG gpio value = %d .\n",gpio_get_value(up_otg_select_gpio_num));
+	} else {
+		//gpio_set_value(up_otg_select_gpio_num, 0);
+		gpio_direction_input(up_otg_select_gpio_num);
+		mdelay(5);
+		printk("UP_OTG_pull down the otg select gpio after disable OTG gpio value = %d .\n",gpio_get_value(up_otg_select_gpio_num));
+	}
+}
+#endif
+#endif
+
+
+#ifdef __CUST_WIRELESS_CHARGE_SUPPORT__
+	#if __CUST_WIRELESS_CHARGE_SUPPORT__
+int up_parse_wireless_dts(struct device_node *node, const char *gpio_name)
+{
+	int gpio_num = 0;
+	struct gpio_desc *desc;
+	int ret = 0;
+
+	if (node)
+	{
+		gpio_num = of_get_named_gpio(node, gpio_name, 0);
+		if (gpio_num < 0)
+		{
+			pr_info("%s: of_get_named_gpio fail. \n", __func__);
+			return -1;
+		}
+		else
+		{
+			pr_info("%s: of_get_named_gpio GPIO is %d.\n", __func__, gpio_num);
+			desc = gpio_to_desc(gpio_num);
+			if (!desc)
+			{
+				pr_info("%s: gpio_desc is null.\n", __func__);
+				return -1;
+			}
+			else
+				pr_info("%s: gpio_desc is not null.\n", __func__);
+
+			if (gpio_is_valid(gpio_num))
+				pr_info("%s: gpio number %d is valid. \n", __func__ ,gpio_num);
+
+			ret = gpio_request(gpio_num, gpio_name);
+			if (ret)
+			{
+				pr_info("%s: gpio_request fail. \n", __func__);
+				return -1;
+			}
+			else
+			{
+				ret = gpio_direction_output(gpio_num, 1);
+				if (ret)
+				{
+					pr_info("%s: gpio_direction_output failed. \n", __func__);
+					return -1;
+				}
+
+				gpio_set_value(gpio_num, 0);
+				pr_info("%s: gpio_get_value =%d. \n", __func__, gpio_get_value(gpio_num));
+
+				return gpio_num; 
+			}
+		}
+	}
+	else
+	{
+		pr_info("%s: get gpio num fail. \n", __func__);
+		return -1;
+	}
+}
+
+int get_wireless_gpio(void)
+{
+	struct device_node *node;
+	pr_info("%s: enter. \n", __func__);
+
+	node = of_find_compatible_node(NULL, NULL, "mediatek,usb_boost");
+	if (node)
+	{
+		up_wireless_charge_gpio_num = up_parse_wireless_dts(node, WIRELESS_CHARGE_GPIO_NAME);
+
+		if (0 > up_wireless_charge_gpio_num)
+		{
+			pr_info("%s: up_parse_dts fail. \n", __func__);
+			return -1;
+		}
+	}
+	else
+	{
+		pr_info("%s: cannot get the node: 'mediatek,usb_boost'.\n", __func__);
+		return -ENODEV;
+	}
+
+	pr_info("%s: end. \n", __func__);
+	return 0;
+}
+void up_wireless_gpio_set(bool en)
+{
+	if(en) {
+		gpio_direction_output(up_wireless_charge_gpio_num,0);
+		gpio_set_value(up_wireless_charge_gpio_num, 1);
+		mdelay(5);
+		printk("UP_OTG_pull up the wireless charge gpio after enable OTG gpio value = %d .\n",gpio_get_value(up_wireless_charge_gpio_num));
+	} else {
+		gpio_direction_input(up_wireless_charge_gpio_num);
+		mdelay(5);
+		printk("UP_OTG_pull down the wireless charge gpio after disable OTG gpio value = %d .\n",gpio_get_value(up_wireless_charge_gpio_num));
+	}
+}
+#endif
+#endif
+
 static int mtk_usb_extcon_set_vbus(struct mtk_extcon_info *extcon,
 							bool is_on)
 {
+#if !defined(CONFIG_CHARGER_PSC5415A) || !defined(CONFIG_CHARGER_BCT24157)
 	int ret;
+#endif
 #if defined ADAPT_CHARGER_V1
 	ret = mtk_usb_extcon_set_vbus_v1(is_on);
 #else
-	struct regulator *vbus = extcon->vbus;
 	struct device *dev = extcon->dev;
-
+#if defined(CONFIG_CHARGER_PSC5415A) || defined(CONFIG_CHARGER_BCT24157)
+       struct charger_device *chg_dev;
+dev_err(dev, "vbus turn %s\n", is_on ? "on" : "off");
+       chg_dev = get_charger_by_name("primary_chg");
+       if (!chg_dev)
+           return 0;   
+#else
+       struct regulator *vbus = extcon->vbus;
+#endif
 	/* vbus is optional */
+#if defined(CONFIG_CHARGER_PSC5415A) || defined(CONFIG_CHARGER_BCT24157)
+	if (extcon->vbus_on == is_on)
+#else
 	if (!vbus || extcon->vbus_on == is_on)
+#endif
 		return 0;
 
 	dev_info(dev, "vbus turn %s\n", is_on ? "on" : "off");
 
 	if (is_on) {
+#if defined(CONFIG_CHARGER_PSC5415A) || defined(CONFIG_CHARGER_BCT24157)		
+		charger_dev_enable_otg(chg_dev, is_on);
+#else
 		if (extcon->vbus_vol) {
 			ret = regulator_set_voltage(vbus,
 					extcon->vbus_vol, extcon->vbus_vol);
@@ -327,15 +735,21 @@ static int mtk_usb_extcon_set_vbus(struct mtk_extcon_info *extcon,
 			dev_err(dev, "vbus regulator enable failed\n");
 			return ret;
 		}
+		mobile_source_handler(1);
+#endif
 	} else {
+#if defined(CONFIG_CHARGER_PSC5415A) || defined(CONFIG_CHARGER_BCT24157)
+		charger_dev_enable_otg(chg_dev, is_on);
+#else
 		regulator_disable(vbus);
+#endif
+		mobile_source_handler(0);
 	}
 
 	extcon->vbus_on = is_on;
 
-	ret = 0;
 #endif //ADAPT_CHARGER_V1
-	return ret;
+	return 0;
 }
 
 #ifdef CONFIG_TCPC_CLASS
@@ -402,7 +816,16 @@ static int mtk_extcon_tcpc_notifier(struct notifier_block *nb,
 			noti->typec_state.new_state == TYPEC_UNATTACHED) {
 			dev_info(dev, "Type-C plug out\n");
 			mtk_usb_extcon_set_role(extcon, DUAL_PROP_DR_NONE);
+#ifdef __CUST_TCPC_POLARITY_DETECT__
+			update_tcpc_polarity(UP_TCPC_PLUGOUT);
+#endif
 		}
+#ifdef __CUST_TCPC_POLARITY_DETECT__
+		if(noti->typec_state.new_state == TYPEC_ATTACHED_SRC|| noti->typec_state.new_state == TYPEC_ATTACHED_SNK){
+			update_tcpc_polarity(noti->typec_state.polarity);
+
+		}
+#endif
 		break;
 	case TCP_NOTIFY_DR_SWAP:
 		dev_info(dev, "%s dr_swap, new role=%d\n",
@@ -464,10 +887,20 @@ static void mtk_usb_extcon_detect_cable(struct work_struct *work)
 
 	/* at first we clean states which are no longer active */
 	if (id) {
+#ifdef __CUST_UVC_VBUS_GPIO__
+		gpio_set_value(up_uvc_vbus_gpio_num, 0);
+		gpio_set_value(up_uvc_switch_gpio_num,0);
+#else
 		mtk_usb_extcon_set_vbus(extcon, false);
+#endif
 		mtk_usb_extcon_set_role(extcon, DUAL_PROP_DR_NONE);
 	} else {
+#ifdef __CUST_UVC_VBUS_GPIO__
+		gpio_set_value(up_uvc_switch_gpio_num,1);
+		gpio_set_value(up_uvc_vbus_gpio_num, 1);
+#else
 		mtk_usb_extcon_set_vbus(extcon, true);
+#endif
 		mtk_usb_extcon_set_role(extcon, DUAL_PROP_DR_HOST);
 	}
 }
@@ -565,8 +998,65 @@ void mt_usb_disconnect_v1(void)
 EXPORT_SYMBOL_GPL(mt_usb_disconnect_v1);
 #endif //ADAPT_PSY_V1
 
+#ifdef CONFIG_WIRELESS_POWER_MT5728
+#include<linux/workqueue.h>
+struct mtk_extcon_info *wlextcon;
+static struct workqueue_struct *wl_wq;
+static struct delayed_work dwork;
+static int wl_ops;
+
+static void do_vbus_work(struct work_struct *work)
+{
+
+	bool vbus_on = !!wl_ops;
+
+	mtk_usb_extcon_set_vbus(wlextcon, vbus_on);
+
+
+}
+
+static void issue_vbus_work(int ops, int delay)
+{
+
+	INIT_DELAYED_WORK(&dwork, do_vbus_work);
+	wl_ops = ops;
+	/* issue vbus work */
+	pr_info("issue work, ops<%d>, delay<%d>\n", ops, delay);
+
+	queue_delayed_work(wl_wq,
+				&dwork, msecs_to_jiffies(delay));
+}
+
+
+void mt_usb_vbus_on(int delay)
+{
+	pr_info("vbus_on\n");
+	issue_vbus_work(true, delay);
+}
+
+void mt_usb_vbus_off(int delay)
+{
+	pr_info("vbus_off\n");
+	issue_vbus_work(false, delay);
+}
+#endif
+
+
+
 #ifdef CONFIG_CHRDET_VBUS_DETECTION
 	extern bool mtk_mt_pmic_get_vcdt(void);
+#endif
+
+
+
+#ifdef __CUST_TCPC_POLARITY_DETECT__
+static ssize_t up_tcpc_polarity_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+
+
+	return scnprintf(buf, PAGE_SIZE, "%d \n", up_tcpc_polarity_val);
+}
+DEVICE_ATTR(up_tcpc_polarity, 0664, up_tcpc_polarity_show, NULL);
 #endif
 
 static int mtk_usb_extcon_probe(struct platform_device *pdev)
@@ -580,10 +1070,24 @@ static int mtk_usb_extcon_probe(struct platform_device *pdev)
 	bool is_vcdt_on;
 #endif
 
+
+	#ifdef __CUST_WIRELESS_CHARGE_SUPPORT__
+		#if __CUST_WIRELESS_CHARGE_SUPPORT__
+			if(0 > get_wireless_gpio())
+				pr_info("get_wireless_gpio failed.\n");	
+		#endif
+	#endif
+	#ifdef CONFIG_WIRELESS_POWER_MT5728			
+			gpio_direction_input(up_wireless_charge_gpio_num); //mt5728 wireless charge pin need default output status		
+	#endif
+
 	extcon = devm_kzalloc(&pdev->dev, sizeof(*extcon), GFP_KERNEL);
 	if (!extcon)
 		return -ENOMEM;
 
+#ifdef CONFIG_WIRELESS_POWER_MT5728
+	wlextcon = extcon;
+#endif
 	extcon->dev = dev;
 
 	/* extcon */
@@ -625,6 +1129,9 @@ static int mtk_usb_extcon_probe(struct platform_device *pdev)
 	}
 
 	/* vbus */
+#if defined(CONFIG_CHARGER_PSC5415A) || defined(CONFIG_CHARGER_BCT24157)
+	
+#else
 	extcon->vbus = devm_regulator_get(dev, "vbus");
 	if (IS_ERR(extcon->vbus)) {
 		dev_err(dev, "failed to get vbus\n");
@@ -640,7 +1147,7 @@ static int mtk_usb_extcon_probe(struct platform_device *pdev)
 					&extcon->vbus_cur))
 		dev_info(dev, "vbus-current=%d", extcon->vbus_cur);
 #endif
-
+#endif
 	extcon->bypss_typec_sink =
 		of_property_read_bool(dev->of_node,
 			"mediatek,bypss-typec-sink");
@@ -649,6 +1156,9 @@ static int mtk_usb_extcon_probe(struct platform_device *pdev)
 	if (!extcon->extcon_wq)
 		return -ENOMEM;
 
+#ifdef CONFIG_WIRELESS_POWER_MT5728
+	wl_wq = create_singlethread_workqueue("wl_workq");
+#endif
 	extcon->support_u3 = !of_property_read_bool(dev->of_node, "not_support_u3");
 	if (!extcon->support_u3)
 		dev_info(dev, "platform does not support U3\n");
@@ -674,6 +1184,26 @@ static int mtk_usb_extcon_probe(struct platform_device *pdev)
 	if (ret < 0)
 		dev_info(dev, "failed to init id pin\n");
 
+#ifdef __CUST_UVC_VBUS_GPIO__
+		up_uvc_vbus_gpio_num = up_parse_dts(dev->of_node, "uvc_vbus_gpio");
+
+		if (0 > up_uvc_vbus_gpio_num)
+		{
+			dev_info(dev,"%s: up_parse_dts fail. \n", __func__);
+			
+		}
+
+
+		up_uvc_switch_gpio_num = up_parse_dts(dev->of_node, "uvc_switch_gpio");
+
+		if (0 > up_uvc_switch_gpio_num)
+		{
+			dev_info(dev,"%s: up_parse_dts fail. \n", __func__);
+			
+		}
+
+	
+#endif
 	/* power psy */
 	ret = mtk_usb_extcon_psy_init(extcon);
 	if (ret < 0)
@@ -689,6 +1219,23 @@ static int mtk_usb_extcon_probe(struct platform_device *pdev)
 	g_extcon = extcon;
 
 	platform_set_drvdata(pdev, extcon);
+
+	#ifdef __CUST_OTG_GPIO_SELECT__
+	   	#if __CUST_OTG_GPIO_SELECT__
+			if(0 > get_otg_select_gpio()) {
+				printk("UP_OTG_get_otg_select_gpio failed.\n");	
+			}
+			#ifdef CONFIG_WIRELESS_POWER_MT5728
+				gpio_direction_input(up_otg_select_gpio_num);
+			#endif
+	  	#endif
+	#endif
+
+#ifdef __CUST_TCPC_POLARITY_DETECT__
+		ret = device_create_file(dev, &dev_attr_up_tcpc_polarity);
+		if (ret)
+			dev_err(dev, "failed to create polarity attr\n");
+#endif
 
 	return 0;
 }
@@ -733,7 +1280,7 @@ static int __init mtk_usb_extcon_init(void)
 {
 	return platform_driver_register(&mtk_usb_extcon_driver);
 }
-late_initcall(mtk_usb_extcon_init);
+late_initcall_sync(mtk_usb_extcon_init);
 
 static void __exit mtk_usb_extcon_exit(void)
 {

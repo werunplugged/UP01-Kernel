@@ -13,8 +13,10 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/wait.h>
-#include <mt-plat/prop_chgalgo_class.h>
-#include <mt-plat/mtk_battery.h>
+#include <linux/fb.h>
+#include <mt-plat/v1/prop_chgalgo_class.h>
+#include <mt-plat/v1/mtk_battery.h>
+#include <linux/cust_include/cust_project_all_config.h>
 
 #define PCA_DV2_ALGO_VERSION	"2.0.2_G"
 #define MS_TO_NS(msec)		((msec) * 1000 * 1000)
@@ -32,7 +34,11 @@
 #define DV2_DVCHG_STARTUP_CONVERT_RATIO		210	/* % */
 #define DV2_DVCHG_CHARGING_CONVERT_RATIO	202	/* % */
 #define DV2_VBUSOVP_RATIO	110
-#define DV2_IBUSOCP_RATIO	110
+#ifdef __CUST_IBUSOCP_RATIO__
+       #define DV2_IBUSOCP_RATIO     __CUST_IBUSOCP_RATIO__
+#else        
+       #define DV2_IBUSOCP_RATIO       110
+#endif
 #define DV2_VBATOVP_RATIO	110
 #define DV2_IBATOCP_RATIO	110
 #define DV2_ITAOCP_RATIO	110
@@ -54,6 +60,10 @@
 
 #define DV2_RESET_NOTIFY \
 	(BIT(PCA_NOTIEVT_DETACH) | BIT(PCA_NOTIEVT_HARDRESET))
+
+#ifdef CONFIG_CHARGER_NU2105
+extern int nu2105_exist;
+#endif
 
 enum dv2_algo_state {
 	DV2_ALGO_INIT = 0,
@@ -224,6 +234,7 @@ struct dv2_algo_data {
 	enum dv2_thermal_level tswchg_level;
 	int thermal_throttling;
 	int jeita_vbat_cv;
+	bool lcd_on;
 };
 
 /*
@@ -242,6 +253,7 @@ struct dv2_algo_info {
 	struct prop_chgalgo_device *pca;
 	struct dv2_algo_desc *desc;
 	struct dv2_algo_data *data;
+	struct notifier_block notifier;
 };
 
 /* If there's no property in dts, these values will be applied */
@@ -255,7 +267,8 @@ static struct dv2_algo_desc algo_desc_defval = {
 	.idvchg_term = 500,
 	.idvchg_step = 50,
 	.ita_level = {3000, 2700, 2400, 2000},
-	.rcable_level = {250, 278, 313, 375},
+	//.rcable_level = {250, 278, 313, 375}, 
+        .rcable_level = {300, 350, 375, 500},
 	.ita_level_dual = {4000, 3700, 3400, 3000},
 	.rcable_level_dual = {188, 203, 221, 250},
 	.idvchg_ss_init = 500,
@@ -293,6 +306,10 @@ static struct dv2_algo_desc algo_desc_defval = {
 	.ita_cap_min = 1000,
 	.allow_not_check_ta_status = true,
 };
+
+static	u32 pca_master_ibat = 0;
+static	u32 pca_slave_ibat = 0;
+static struct dv2_algo_info *pinfo;
 
 static inline u32 precise_div(u64 dividend, u64 divisor)
 {
@@ -352,6 +369,9 @@ static int __dv2_get_adc(struct dv2_algo_info *info,
 {
 	struct dv2_algo_data *data = info->data;
 	int ret, i, ibus;
+#ifdef CONFIG_CHARGER_NU2105    
+    int vbus;
+#endif
 	struct dv2_stop_info sinfo = {
 		.reset_ta = true,
 		.hardreset_ta = false,
@@ -389,6 +409,17 @@ static int __dv2_get_adc(struct dv2_algo_info *info,
 		}
 		return 0;
 	}
+    
+#ifdef CONFIG_CHARGER_NU2105    
+	if(chan == PCA_ADCCHAN_VBUS){
+		if(nu2105_exist){
+			vbus = battery_get_vbus();
+			*val = vbus;
+			PCA_ERR("%s()nu2105 is exist. vbus = %d. \n",__func__, vbus);
+			return 0;
+		}
+	}
+#endif
 	return prop_chgalgo_get_adc(data->pca_dvchg[DV2_DVCHG_MASTER], chan,
 				    val, val);
 stop:
@@ -598,9 +629,12 @@ static inline int __dv2_set_ta_cap_cc(struct dv2_algo_info *info, u32 vta,
 		}
 		ret = prop_chgalgo_set_ta_cap(data->pca_ta, vta, ita);
 		if (ret < 0) {
-			PCA_ERR("set ta cap fail(%d)\n", ret);
+			PCA_ERR("cc. set ta cap fail(%d). vta = %d. ita = %d. \n", ret, vta, ita);
 			return ret;
 		}
+        else{
+			PCA_ERR("cc. set ta cap ok(%d). vta = %d. ita = %d. \n", ret, vta, ita);
+        }
 		msleep(desc->ta_blanking);
 		if (!data->is_dvchg_en[DV2_DVCHG_MASTER])
 			break;
@@ -907,11 +941,16 @@ static inline int __dv2_get_ita_lmt(struct dv2_algo_info *info)
 		ita = min(ita, data->ita_lmt - desc->tbat_curlmt[data->tbat_level]);
 		ita = min(ita, data->ita_lmt - desc->tdvchg_curlmt[data->tdvchg_level]);
 	}
-	PCA_INFO("ita(org,tta,tbat,tdvchg,prlmt,throt)=%d(%d,%d,%d,%d,%d,%d)\n",
+
+	if(data->lcd_on){
+		ita = min(ita, (u32)2000);
+	}
+
+	PCA_INFO("ita(org,tta,tbat,tdvchg,prlmt,throt),lcd=%d(%d,%d,%d,%d,%d,%d),%d\n",
 		 ita, data->ita_lmt, desc->tta_curlmt[data->tta_level],
 		 desc->tbat_curlmt[data->tbat_level],
 		 desc->tdvchg_curlmt[data->tdvchg_level], data->ita_pwr_lmt,
-		 data->thermal_throttling);
+		 data->thermal_throttling,data->lcd_on);
 	mutex_unlock(&data->ext_lock);
 	return ita;
 }
@@ -991,7 +1030,7 @@ static int __dv2_set_dvchg_protection(struct dv2_algo_info *info, bool dual)
 	struct dv2_algo_desc *desc = info->desc;
 	struct prop_chgalgo_ta_auth_data *auth_data = &data->ta_auth_data;
 	u32 vout, idvchg_lmt;
-	u32 vbusovp, ibusocp, vbatovp, ibatocp;
+	u32 vbusovp, ibusocp, vbatovp, ibatocp, ibatocp_max = 12000;
 
 	/* VBATOVP ALARM */
 	ret = prop_chgalgo_set_vbatovp_alarm(data->pca_dvchg[DV2_DVCHG_MASTER],
@@ -1006,6 +1045,9 @@ static int __dv2_set_dvchg_protection(struct dv2_algo_info *info, bool dual)
 	vbusovp = percent(__dv2_vout2vbus(info, vout), DV2_VBUSOVP_RATIO);
 	vbusovp = min_t(u32, vbusovp, auth_data->vcap_max);
 	ret = prop_chgalgo_set_vbusovp(data->pca_dvchg[DV2_DVCHG_MASTER],
+				       vbusovp);
+	if(dual)			       
+		ret = prop_chgalgo_set_vbusovp(data->pca_dvchg[DV2_DVCHG_SLAVE],
 				       vbusovp);
 	if (ret < 0) {
 		PCA_ERR("set vbusovp fail(%d)\n", ret);
@@ -1048,6 +1090,11 @@ static int __dv2_set_dvchg_protection(struct dv2_algo_info *info, bool dual)
 			  DV2_VBATOVP_RATIO);
 	ret = prop_chgalgo_set_vbatovp(data->pca_dvchg[DV2_DVCHG_MASTER],
 				       vbatovp);
+
+	if (data->pca_dvchg[DV2_DVCHG_SLAVE] && dual)
+		ret = prop_chgalgo_set_vbatovp(data->pca_dvchg[DV2_DVCHG_SLAVE],
+						vbatovp);
+
 	if (ret < 0) {
 		PCA_ERR("set vbatovp fail(%d)\n", ret);
 		return ret;
@@ -1056,8 +1103,24 @@ static int __dv2_set_dvchg_protection(struct dv2_algo_info *info, bool dual)
 	/* IBATOCP */
 	ibatocp = percent(2 * data->idvchg_cc + desc->swchg_ichg,
 			  DV2_IBATOCP_RATIO);
+
+	PCA_INFO("before. data->idvchg_cc = %d. desc->swchg_ichg = %d. ibatocp = %d. \n",
+                data->idvchg_cc, desc->swchg_ichg, ibatocp);
+    
+	if (data->pca_dvchg[DV2_DVCHG_SLAVE] && dual) {
+		/* for setting master ibatocp = master + slave*/
+		ibatocp *=2;
+		/* for battery can only sustain 12A */
+		ibatocp = min(ibatocp, ibatocp_max);
+	}
+
 	ret = prop_chgalgo_set_ibatocp(data->pca_dvchg[DV2_DVCHG_MASTER],
 				       ibatocp);
+
+	if (data->pca_dvchg[DV2_DVCHG_SLAVE] && dual)
+		ret = prop_chgalgo_set_ibatocp(data->pca_dvchg[DV2_DVCHG_SLAVE],
+					       ibatocp);
+
 	if (ret < 0) {
 		PCA_ERR("set ibatocp fail(%d)\n", ret);
 		return ret;
@@ -1105,6 +1168,8 @@ static int __dv2_enable_dvchg_charging(struct dv2_algo_info *info,
 	int ret;
 	struct dv2_algo_data *data = info->data;
 	struct dv2_algo_desc *desc = info->desc;
+    
+	PCA_INFO("role = %d. en = %d. data->is_dvchg_en[role] = %d. \n", role, en, data->is_dvchg_en[role]);
 
 	if (!data->pca_dvchg[role])
 		return -ENODEV;
@@ -1324,7 +1389,8 @@ static int __dv2_stop(struct dv2_algo_info *info, struct dv2_stop_info *sinfo)
 
 	if (data->is_swchg_en)
 		__dv2_enable_swchg_charging(info, false);
-	__dv2_enable_dvchg_charging(info, DV2_DVCHG_SLAVE, false);
+	if(data->pca_dvchg[DV2_DVCHG_SLAVE])
+		__dv2_enable_dvchg_charging(info, DV2_DVCHG_SLAVE, false);
 	__dv2_set_dvchg_charging(info, false);
 	if (!(data->notify & DV2_RESET_NOTIFY)) {
 		if (sinfo->hardreset_ta)
@@ -1332,8 +1398,6 @@ static int __dv2_stop(struct dv2_algo_info *info, struct dv2_stop_info *sinfo)
 		else if (sinfo->reset_ta) {
 			prop_chgalgo_set_ta_cap(data->pca_ta, DV2_VTA_INIT,
 						DV2_ITA_INIT);
-			__dv2_enable_ta_charging(info, false, DV2_VTA_INIT,
-						 DV2_ITA_INIT);
 		}
 	}
 	__dv2_set_hv_dvchg_protection(info, false);
@@ -1397,8 +1461,8 @@ static int __dv2_earily_restart(struct dv2_algo_info *info)
 	int ret;
 	struct dv2_algo_data *data = info->data;
 	struct prop_chgalgo_ta_auth_data *auth_data = &data->ta_auth_data;
-
-	ret = __dv2_enable_dvchg_charging(info, DV2_DVCHG_SLAVE, false);
+	if(data->pca_dvchg[DV2_DVCHG_SLAVE])
+		ret = __dv2_enable_dvchg_charging(info, DV2_DVCHG_SLAVE, false);
 	if (ret < 0) {
 		PCA_ERR("disable slave dvchg fail(%d)\n", ret);
 		return ret;
@@ -1474,20 +1538,33 @@ static inline int __dv2_start(struct dv2_algo_info *info)
 		goto start;
 	}
 	msleep(1000);
-	ret = prop_chgalgo_get_adc(data->pca_swchg, PCA_ADCCHAN_VBUS, &vbus,
-				   &vbus);
-	if (ret < 0) {
-		PCA_ERR("get swchg vbus fail(%d)\n", ret);
-		goto start;
+#ifdef CONFIG_CHARGER_NU2105
+	if(nu2105_exist){
+		vbus = battery_get_vbus();
+		PCA_ERR("%s()nu2105 is exist. vbus = %d. \n",__func__, vbus);
+	}else
+#endif	
+	{
+		ret = prop_chgalgo_get_adc(data->pca_swchg, PCA_ADCCHAN_VBUS, &vbus,
+					   &vbus);
+		if (ret < 0) {
+			PCA_ERR("get swchg vbus fail(%d)\n", ret);
+			goto start;
+		}
 	}
 	ret = prop_chgalgo_get_adc(data->pca_swchg, PCA_ADCCHAN_IBUS, &ibus,
 				   &ibus);
+
+    PCA_ERR("%s() ret = %d. ibus = %d. \n",__func__, ret, ibus);
+
+    
 	if (ret < 0) {
 		PCA_ERR("get swchg ibus fail(%d)\n", ret);
 		goto start;
 	}
 	ret = prop_chgalgo_get_adc(data->pca_swchg, PCA_ADCCHAN_VBAT, &vbat,
 				   &vbat);
+    PCA_ERR("%s() ret = %d. vbat = %d. \n",__func__, ret, vbat);
 	if (ret < 0) {
 		PCA_ERR("get swchg vbat fail(%d)\n", ret);
 		goto start;
@@ -2201,7 +2278,8 @@ static int __dv2_check_slave_dvchg_off(struct dv2_algo_info *info)
 
 	data->idvchg_cc = desc->ita_level[DV2_RCABLE_NORMAL] - desc->swchg_aicr;
 	data->idvchg_term = desc->idvchg_term;
-	ret = __dv2_enable_dvchg_charging(info, DV2_DVCHG_SLAVE, false);
+	if(data->pca_dvchg[DV2_DVCHG_SLAVE])
+		ret = __dv2_enable_dvchg_charging(info, DV2_DVCHG_SLAVE, false);
 	if (ret < 0) {
 		PCA_ERR("disable slave dvchg fail(%d)\n", ret);
 		return ret;
@@ -2337,6 +2415,7 @@ static int __dv2_algo_ss_dvchg_with_ta_cc(struct dv2_algo_info *info)
 cc_cv:
 		ita = min(data->ita_setting - desc->idvchg_ss_step, idvchg_lmt);
 		data->state = DV2_ALGO_CC_CV;
+        PCA_DBG("DV2_ALGO_CC_CV. 111. \n");        
 		goto out_set_cap;
 	}
 
@@ -2370,6 +2449,7 @@ cc_cv:
 		}
 		data->state = DV2_ALGO_CC_CV;
 		ita = idvchg_lmt;
+        PCA_DBG("DV2_ALGO_CC_CV. 222. \n");                
 		goto out_set_cap;
 	}
 
@@ -2511,13 +2591,16 @@ cc_cv:
 		vta -= auth_data->vta_step;
 		ita -= ita_gap_per_vstep;
 		data->state = DV2_ALGO_CC_CV;
+        PCA_DBG("DV2_ALGO_CC_CV. 333. \n");                        
 		goto out_set_cap;
 	}
 
 	/* IBUS reaches CC level */
 	if (data->ita_measure + ita_gap_per_vstep > idvchg_lmt ||
-	    vta == auth_data->vcap_max)
-		data->state = DV2_ALGO_CC_CV;
+	    vta == auth_data->vcap_max){
+    		data->state = DV2_ALGO_CC_CV;
+            PCA_DBG("DV2_ALGO_CC_CV. 444. \n");                            
+    }
 	else {
 		vta += auth_data->vta_step;
 		vta = min_t(u32, vta, auth_data->vcap_max);
@@ -2659,8 +2742,10 @@ out:
 		goto err;
 	}
 	if (!data->is_swchg_en || vbat >= desc->swchg_off_vbat ||
-	    aicr >= data->aicr_lmt)
-		data->state = DV2_ALGO_CC_CV;
+	    aicr >= data->aicr_lmt){
+    		data->state = DV2_ALGO_CC_CV;
+            PCA_DBG("DV2_ALGO_CC_CV. 555. \n"); 
+        }
 	return 0;
 err:
 	return __dv2_stop(info, &sinfo);
@@ -2989,11 +3074,20 @@ static bool __dv2_check_dvchg_vbusovp(struct dv2_algo_info *info,
 	for (i = DV2_DVCHG_MASTER; i < DV2_DVCHG_MAX; i++) {
 		if (!data->is_dvchg_en[i])
 			continue;
-		ret = prop_chgalgo_get_adc(data->pca_dvchg[i], PCA_ADCCHAN_VBUS,
-					   &vbus, &vbus);
-		if (ret < 0) {
-			PCA_ERR("get vbus fail(%d)\n", ret);
-			return false;
+
+#ifdef CONFIG_CHARGER_NU2105
+		if(nu2105_exist){
+			vbus = battery_get_vbus();
+			PCA_ERR("%s()nu2105 is exist. vbus = %d. \n",__func__, vbus);
+		}else
+#endif		
+		{
+			ret = prop_chgalgo_get_adc(data->pca_dvchg[i], PCA_ADCCHAN_VBUS,
+						   &vbus, &vbus);
+			if (ret < 0) {
+				PCA_ERR("get vbus fail(%d)\n", ret);
+				return false;
+			}
 		}
 		PCA_INFO("(%s)vbus(%dmV), vbusovp(%dmV)\n",
 			 __dv2_dvchg_role_name[i], vbus, vbusovp);
@@ -3333,7 +3427,7 @@ static bool __dv2_is_ta_rdy(struct dv2_algo_info *info)
 		ret = prop_chgalgo_authenticate_ta(data->pca_ta_pool[i],
 						   auth_data);
 		if (ret < 0) {
-			PCA_DBG("%s authenticate fail(%d)\n",
+			printk("%s authenticate fail(%d)\n",
 				desc->support_ta[i], ret);
 			continue;
 		}
@@ -3402,6 +3496,10 @@ static inline int __dv2_plugout_reset(struct dv2_algo_info *info,
 	PCA_DBG("++\n");
 	data->ta_ready = false;
 	data->run_once = false;
+
+	pca_master_ibat = 0;
+	pca_slave_ibat = 0;
+
 	return __dv2_stop(info, sinfo);
 }
 
@@ -3619,6 +3717,10 @@ static int __dv2_dump_charging_info(struct dv2_algo_info *info)
 	if (ret < 0)
 		PCA_ERR("get ta measure cap fail(%d)\n", ret);
 
+	pca_master_ibat = ibus[DV2_DVCHG_MASTER];
+	if(data->pca_dvchg[DV2_DVCHG_SLAVE])
+		pca_slave_ibat = ibus[DV2_DVCHG_SLAVE];
+
 	PCA_INFO("vbus,ibus(master,slave,sw),vbat,ibat=%d,(%d,%d,%d),%d,%d\n",
 		 vbus, ibus[DV2_DVCHG_MASTER], ibus[DV2_DVCHG_SLAVE],
 		 ibus_swchg, vbat, ibat);
@@ -3627,6 +3729,24 @@ static int __dv2_dump_charging_info(struct dv2_algo_info *info)
 		 data->ita_measure, data->force_ta_cv);
 	return 0;
 }
+
+static ssize_t show_pca_master(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	PCA_INFO("%s() ibat = %d\n",__func__,pca_master_ibat);
+	return sprintf(buf, "%d\n", pca_master_ibat);	
+}
+
+static DEVICE_ATTR(pca_master, 0644, show_pca_master, NULL);
+
+static ssize_t show_pca_slave(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	PCA_INFO("%s() ibat = %d\n",__func__,pca_slave_ibat);
+	return sprintf(buf, "%d\n", pca_slave_ibat);	
+}
+
+static DEVICE_ATTR(pca_slave, 0644, show_pca_slave, NULL);
 
 static int __dv2_algo_threadfn(void *param)
 {
@@ -3651,7 +3771,7 @@ static int __dv2_algo_threadfn(void *param)
 		}
 		atomic_set(&data->wakeup_thread, 0);
 		mutex_lock(&data->lock);
-		PCA_INFO("state = %s\n", __dv2_algo_state_name[data->state]);
+		printk("__dv2_algo_threadfn. state = %s\n", __dv2_algo_state_name[data->state]);
 		if (atomic_read(&data->stop_algo))
 			__dv2_stop(info, &sinfo);
 		__dv2_pre_handle_notify_evt(info);
@@ -3735,9 +3855,11 @@ static int dv2_init_algo(struct prop_chgalgo_device *pca)
 		ret = -ENOMEM;
 		goto out;
 	}
+    
 	for (i = 0; i < desc->support_ta_cnt; i++) {
 		data->pca_ta_pool[i] =
 			prop_chgalgo_dev_get_by_name(desc->support_ta[i]);
+        
 		if (data->pca_ta_pool[i]) {
 			has_ta = true;
 			continue;
@@ -3748,6 +3870,7 @@ static int dv2_init_algo(struct prop_chgalgo_device *pca)
 		ret = -ENODEV;
 		goto out;
 	}
+	PCA_DBG("++++\n");
 
 	data->pca_swchg = prop_chgalgo_dev_get_by_name("pca_chg_swchg");
 	if (!data->pca_swchg) {
@@ -3764,6 +3887,9 @@ static int dv2_init_algo(struct prop_chgalgo_device *pca)
 	}
 	data->pca_dvchg[DV2_DVCHG_SLAVE] =
 		prop_chgalgo_dev_get_by_name("pca_chg_dvchg_slave");
+
+	PCA_DBG("++++++\n");
+    
 	if (!data->pca_dvchg[DV2_DVCHG_SLAVE])
 		PCA_ERR("get pca_dvchg_slave fail\n");
 	data->pca_hv_dvchg =
@@ -4169,9 +4295,43 @@ static int dv2_parse_dt(struct dv2_algo_info *info)
 	return 0;
 }
 
+static int dv2_fb_notifier_callback(struct notifier_block* self, unsigned long event, void* data)
+{
+    int retval = 0;
+    struct fb_event* evdata = data;
+    unsigned int blank;
+
+    PCA_INFO("%s enter.  event : 0x%x\n", __func__, (unsigned)event);
+    if (event != FB_EVENT_BLANK /* FB_EARLY_EVENT_BLANK */) {
+        return 0;
+    }
+
+    blank = *(int*)evdata->data;
+    PCA_INFO("%s enter, blank=0x%x\n", __func__, blank);
+
+    switch (blank) {
+    case FB_BLANK_UNBLANK:
+        PCA_INFO("%s: lcd on notify\n", __func__);
+	pinfo->data->lcd_on = true;
+        break;
+
+    case FB_BLANK_POWERDOWN:
+        PCA_INFO("%s: lcd off notify\n", __func__);
+	pinfo->data->lcd_on = false;
+        break;
+
+    default:
+        PCA_INFO("%s: other notifier, ignore\n", __func__);
+        break;
+    }
+
+    return retval;
+}
+
 static int dv2_algo_probe(struct platform_device *pdev)
 {
 	int ret;
+	int ret_device_file;
 	struct dv2_algo_info *info;
 	struct dv2_algo_data *data;
 
@@ -4200,6 +4360,10 @@ static int dv2_algo_probe(struct platform_device *pdev)
 		return PTR_ERR(info->pca);
 	}
 
+	/*sysfs node*/
+	ret_device_file = device_create_file((info->dev), &dev_attr_pca_master);
+	ret_device_file = device_create_file((info->dev), &dev_attr_pca_slave);
+
 	/* init algo thread & timer */
 	mutex_init(&data->notify_lock);
 	mutex_init(&data->lock);
@@ -4215,6 +4379,10 @@ static int dv2_algo_probe(struct platform_device *pdev)
 		dev_notice(info->dev, "%s run task fail(%d)\n", __func__, ret);
 		goto err;
 	}
+	pinfo = info;
+	info->notifier.notifier_call = dv2_fb_notifier_callback;
+	fb_register_client(&info->notifier);
+
 	device_init_wakeup(info->dev, true);
 	dev_info(info->dev, "%s successfully\n", __func__);
 	return 0;
@@ -4296,7 +4464,11 @@ static void __exit dv2_algo_exit(void)
 	platform_driver_unregister(&dv2_algo_platdrv);
 	platform_device_unregister(&dv2_algo_platdev);
 }
+#if defined(__CUST_M156_BOARD__)
+device_initcall(dv2_algo_init);
+#else
 device_initcall_sync(dv2_algo_init);
+#endif
 module_exit(dv2_algo_exit);
 
 MODULE_DESCRIPTION("Divide By Two Algorithm For PCA");

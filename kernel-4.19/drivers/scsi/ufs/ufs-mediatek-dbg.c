@@ -35,6 +35,51 @@ static unsigned int cmd_hist_ptr = MAX_CMD_HIST_ENTRY_CNT - 1;
 static struct cmd_hist_struct *cmd_hist;
 static char ufs_aee_buffer[UFS_AEE_BUFFER_SIZE];
 
+static int ufsdbg_dump_health_desc(char **buff, unsigned long *size, struct seq_file *m)
+{
+	int err = 0;
+	int buff_len = QUERY_DESC_HEALTH_DEF_SIZE;
+	u8 desc_buf[QUERY_DESC_HEALTH_DEF_SIZE] = { 0 };
+	int i;
+
+	pm_runtime_get_sync(ufs_mtk_hba->dev);
+	err = ufshcd_read_health_desc(ufs_mtk_hba, desc_buf, buff_len);
+	pm_runtime_put_sync(ufs_mtk_hba->dev);
+
+
+	if (err) {
+		SPREAD_PRINTF(buff, size, m,
+                "Reading Health Descriptor failed. err = %d\n",
+			err);
+		goto out;
+	}
+
+	for (i = 0; i < QUERY_DESC_HEALTH_DEF_SIZE; i++) {
+		SPREAD_PRINTF(buff, size, m,
+			"Health Descriptor[0x%x] = 0x%x\n",
+			i,
+			(u8)desc_buf[i]);
+	}
+
+    SPREAD_PRINTF(buff, size, m,
+		"Health Descriptor[offset 0x02]: %s = 0x%x\n",
+		"bPreEOLInfo",
+		(u8)desc_buf[2]);
+
+    SPREAD_PRINTF(buff, size, m,
+		"Health Descriptor[offset 0x03]: %s = 0x%x\n",
+		"bDeviceLifeTimeEstA",
+		(u8)desc_buf[3]);
+
+    SPREAD_PRINTF(buff, size, m,
+		"Health Descriptor[offset 0x04]: %s = 0x%x\n",
+		"bDeviceLifeTimeEstB",
+		(u8)desc_buf[4]);
+
+out:
+	return err;
+}
+
 void ufsdbg_print_info(char **buff, unsigned long *size, struct seq_file *m)
 {
 	struct ufs_hba *hba = ufs_mtk_get_hba();
@@ -108,6 +153,8 @@ void ufsdbg_print_info(char **buff, unsigned long *size, struct seq_file *m)
 		      hba->dev_info.wmanufacturerid,
 		      hba->dev_info.model,
 			  hba->dev_info.wspecversion);
+
+    ufsdbg_dump_health_desc(buff, size, m);
 
 	/* RWcmd info */
 	SPREAD_PRINTF(buff, size, m,
